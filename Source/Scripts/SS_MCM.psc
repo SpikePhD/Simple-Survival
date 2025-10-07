@@ -126,10 +126,13 @@ EndEvent
 ; Clicks (toggles)
 ; ----------------------------
 Event OnOptionSelect(Int a_option)
+  Bool refreshNeeded = False
+
   If a_option == _optColdEnable
     Bool v = !GetB("weather.cold.enable")
     SetB("weather.cold.enable", v)
     SetToggleOptionValue(a_option, v)
+    refreshNeeded = True
 
   ElseIf a_option == _optHungerEnable
     Bool v2 = !GetB("hunger.enable")
@@ -162,11 +165,20 @@ Event OnOptionSelect(Int a_option)
       Debug.Notification("SS: Ping sent (test penalties)")
     EndIf
   EndIf
+
+  If refreshNeeded
+    RequestControllerRefresh()
+  EndIf
 EndEvent
 
 ; ----------------------------
 ; Sliders - open dialog with proper ranges
 ; ----------------------------
+  EndIf
+  If refreshNeeded
+    RequestControllerRefresh()
+  EndIf
+EndEvent
 Event OnOptionSliderOpen(Int a_option)
   If a_option == _optBaseWarmth
     SetSliderDialogStartValue(GetF("weather.cold.baseRequirement"))
@@ -266,60 +278,73 @@ Event OnOptionSliderOpen(Int a_option)
 EndEvent
 
 Event OnOptionSliderAccept(Int a_option, Float a_value)
+  Bool refreshNeeded = False
+
   If a_option == _optBaseWarmth
     SetF("weather.cold.baseRequirement", a_value)
     SetSliderOptionValue(a_option, a_value, "{0}")
     RefreshWarmthReadout()
+    refreshNeeded = True
 
   ElseIf a_option == _optRegionPleasant
     SetF("weather.cold.region.pleasant", a_value)
     SetSliderOptionValue(a_option, a_value, "{0}")
     RefreshWarmthReadout()
+    refreshNeeded = True
 
   ElseIf a_option == _optRegionCloudy
     SetF("weather.cold.region.cloudy", a_value)
     SetSliderOptionValue(a_option, a_value, "{0}")
     RefreshWarmthReadout()
+    refreshNeeded = True
 
   ElseIf a_option == _optRegionRainy
     SetF("weather.cold.region.rainy", a_value)
     SetSliderOptionValue(a_option, a_value, "{0}")
     RefreshWarmthReadout()
+    refreshNeeded = True
 
   ElseIf a_option == _optRegionSnowy
     SetF("weather.cold.region.snowy", a_value)
     SetSliderOptionValue(a_option, a_value, "{0}")
     RefreshWarmthReadout()
+    refreshNeeded = True
 
   ElseIf a_option == _optWeatherPleasant
     SetF("weather.cold.weather.pleasant", a_value)
     SetSliderOptionValue(a_option, a_value, "{0}")
     RefreshWarmthReadout()
+    refreshNeeded = True
 
   ElseIf a_option == _optWeatherCloudy
     SetF("weather.cold.weather.cloudy", a_value)
     SetSliderOptionValue(a_option, a_value, "{0}")
     RefreshWarmthReadout()
+    refreshNeeded = True
 
   ElseIf a_option == _optWeatherRainy
     SetF("weather.cold.weather.rainy", a_value)
     SetSliderOptionValue(a_option, a_value, "{0}")
     RefreshWarmthReadout()
+    refreshNeeded = True
 
   ElseIf a_option == _optWeatherSnowy
     SetF("weather.cold.weather.snowy", a_value)
     SetSliderOptionValue(a_option, a_value, "{0}")
     RefreshWarmthReadout()
+    refreshNeeded = True
 
   ElseIf a_option == _optExteriorAdjust
     SetF("weather.cold.exteriorAdjust", a_value)
     SetSliderOptionValue(a_option, a_value, "{0}")
     RefreshWarmthReadout()
+    refreshNeeded = True
 
   ElseIf a_option == _optInteriorAdjust
     SetF("weather.cold.interiorAdjust", a_value)
     SetSliderOptionValue(a_option, a_value, "{0}")
     RefreshWarmthReadout()
+    refreshNeeded = True
 
   ElseIf a_option == _optToastCooldown
     SetF("weather.cold.toastMinGapSeconds", a_value)
@@ -329,6 +354,7 @@ Event OnOptionSliderAccept(Int a_option, Float a_value)
     SetF("weather.cold.nightMultiplier", a_value)
     SetSliderOptionValue(a_option, a_value, "{2}")
     RefreshWarmthReadout()
+    refreshNeeded = True
 
   ElseIf a_option == _optRawExpire
     SetF("hunger.rawExpireHours", a_value)
@@ -354,6 +380,10 @@ Event OnOptionSliderAccept(Int a_option, Float a_value)
     SetF("rest.tick", a_value)
     SetSliderOptionValue(a_option, a_value, "{2}")
   EndIf
+
+  If refreshNeeded
+    RequestControllerRefresh()
+  EndIf
 EndEvent
 
 Event OnOptionHighlight(Int a_option)
@@ -364,9 +394,7 @@ Event OnOptionHighlight(Int a_option)
   EndIf
 EndEvent
 
-Event OnConfigClose()
-  RefreshWarmthReadout()
-EndEvent
+Event OnConfigClose()`n  RefreshWarmthReadout()`n  RequestControllerRefresh()`nEndEvent
 
 Function UpdateWarmthCache()
   Float baseReq = GetF("weather.cold.baseRequirement")
@@ -521,4 +549,6 @@ Function RequestControllerRefresh()
     EndIf
   EndIf
 EndFunction
+
+
 
