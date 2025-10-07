@@ -81,6 +81,17 @@ Event OnInit()
   lastToastTime = Utility.GetCurrentRealTime() - GetToastGapSeconds()
 EndEvent
 
+Event OnPlayerLoadGame()
+  InitConfigDefaults()
+  ApplyDebugFlags()
+  EnsurePlayerHasAbility()
+  bRunning = True
+  RegisterForSingleUpdateGameTime(kFastTickH)
+  if bTraceLogs
+    Debug.Trace("[SS] Controller OnPlayerLoadGame: state refreshed, fast tick scheduled")
+  endif
+EndEvent
+
 Event OnUpdateGameTime()
   if !bRunning
     return

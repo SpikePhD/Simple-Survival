@@ -134,3 +134,8 @@ Function RequestRefresh()
     WeatherModule.RequestFastTick()
   endif
 EndFunction
+
+Function NotifySleepComplete(Float hoursSlept)
+  ; placeholder for future hunger/fatigue integration
+  RequestRefresh()
+EndFunction
