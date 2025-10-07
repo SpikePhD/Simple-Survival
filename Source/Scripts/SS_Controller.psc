@@ -21,6 +21,10 @@ Float Property LastWarmth Auto
 Float Property LastSafeRequirement Auto
 Float Property LastWeatherBonus Auto
 Float Property LastBaseRequirement Auto
+Int   Property LastHealthPenalty Auto
+Int   Property LastStaminaPenalty Auto
+Int   Property LastMagickaPenalty Auto
+Int   Property LastSpeedPenalty Auto
 Int   lastRegionBucket = -99
 Int   lastWeatherClass = -99
 Float lastToastTime = 0.0
@@ -152,6 +156,10 @@ Event OnUpdateGameTime()
     LastSafeRequirement = 0.0
     LastWeatherBonus = 0.0
     LastBaseRequirement = 0.0
+    LastHealthPenalty  = 0
+    LastStaminaPenalty = 0
+    LastMagickaPenalty = 0
+    LastSpeedPenalty   = 0
     RegisterForSingleUpdateGameTime(kNormalTickH)
     return
   endif
@@ -183,30 +191,36 @@ Event OnUpdateGameTime()
     deficit = safeReq - warmth
   endif
 
-  ; ---- penalties mapping ----
-  Float regenAt100 = 0.18  ; -18% regen at 100 deficit
-  Float speedAt100 = 5.0   ; -5 SpeedMult points at 100 deficit
-
-  Float regenPenalty = (deficit / 100.0) * regenAt100
-  if regenPenalty > 0.90
-    regenPenalty = 0.90
+  Float penaltyDenom = safeReq
+  if penaltyDenom <= 0.0
+    penaltyDenom = baseRequirement
   endif
-  Float speedPenalty = (deficit / 100.0) * speedAt100
+  if penaltyDenom <= 0.0
+    penaltyDenom = 1.0
+  endif
 
-  Float regenMult  = 1.0 - regenPenalty   ; 0..1
-  Float speedDelta = -speedPenalty        ; negative = slower
+  Int healthPenaltyPct  = ComputePenaltyPercent(deficit, penaltyDenom, 80)
+  Int staminaPenaltyPct = ComputePenaltyPercent(deficit, penaltyDenom, 80)
+  Int magickaPenaltyPct = ComputePenaltyPercent(deficit, penaltyDenom, 80)
+  Int speedPenaltyPct   = ComputePenaltyPercent(deficit, penaltyDenom, 50)
+  LastHealthPenalty  = healthPenaltyPct
+  LastStaminaPenalty = staminaPenaltyPct
+  LastMagickaPenalty = magickaPenaltyPct
+  LastSpeedPenalty   = speedPenaltyPct
 
+  ; ---- penalties mapping ----
   ; ---- apply or clear via driver ----
   if coldOn
     int h = ModEvent.Create("SS_SetCold")
     if h
-      String speedStr = "" + speedDelta       ; pack speed as string
-      ModEvent.PushString(h, speedStr)        ; arg1: string
-      ModEvent.PushFloat(h,  regenMult)       ; arg2: float
+      ModEvent.PushInt(h, healthPenaltyPct)
+      ModEvent.PushInt(h, staminaPenaltyPct)
+      ModEvent.PushInt(h, magickaPenaltyPct)
+      ModEvent.PushInt(h, speedPenaltyPct)
       ModEvent.Send(h)
 
       if bDebugEnabled
-        String msg = "[SS] warm=" + warmth + " / req=" + baseRequirement + " + modifiers=" + modifierSum + " => " + safeReq + " | def=" + deficit + " | spd?=" + speedDelta + " | regenx=" + regenMult
+        String msg = "[SS] warm=" + warmth + " / req=" + baseRequirement + " + modifiers=" + modifierSum + " => " + safeReq + " | def=" + deficit + " | hpPen=" + healthPenaltyPct + "% spdPen=" + speedPenaltyPct + "%"
         if bTraceLogs
           Debug.Trace(msg)
         else
@@ -215,7 +229,7 @@ Event OnUpdateGameTime()
       endif
 
       if bTraceLogs
-        Debug.Trace("[SS] Sent SS_SetCold | speedDelta=" + speedDelta + " regenMult=" + regenMult)
+        Debug.Trace("[SS] Sent SS_SetCold | hp=" + healthPenaltyPct + "% st=" + staminaPenaltyPct + "% mg=" + magickaPenaltyPct + "% speed=" + speedPenaltyPct + "%")
       endif
     endif
 
@@ -243,6 +257,10 @@ Event OnUpdateGameTime()
         Debug.Trace("[SS] Sent SS_ClearCold")
       endif
     endif
+    LastHealthPenalty  = 0
+    LastStaminaPenalty = 0
+    LastMagickaPenalty = 0
+    LastSpeedPenalty   = 0
   endif
 
   ; ---- adaptive cadence decision for next tick ----
@@ -476,6 +494,43 @@ String Function GetWeatherToastMessage(Int classification)
     return "Snowy weather: It's snowing!"
   endif
   return "Weather changed: (unclassified)"
+EndFunction
+
+Int Function ComputePenaltyPercent(Float deficit, Float safeRequirement, Int maxPenalty)
+  if deficit <= 0.0
+    return 0
+  endif
+
+  if safeRequirement <= 0.0
+    return 0
+  endif
+
+  Float ratio = deficit / safeRequirement
+  if ratio > 1.0
+    ratio = 1.0
+  elseif ratio < 0.0
+    ratio = 0.0
+  endif
+
+  Float scaled = ratio * (maxPenalty as Float)
+  Int penalty = RoundFloatToInt(scaled)
+  if penalty > maxPenalty
+    penalty = maxPenalty
+  endif
+  if penalty < 5
+    penalty = 0
+  endif
+  if penalty < 0
+    penalty = 0
+  endif
+  return penalty
+EndFunction
+
+Int Function RoundFloatToInt(Float value)
+  if value >= 0.0
+    return (value + 0.5) as Int
+  endif
+  return (value - 0.5) as Int
 EndFunction
 
 Float Function GetNightMultiplier()

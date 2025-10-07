@@ -28,6 +28,7 @@ Int _optInteriorAdjust
 Int _optToastCooldown
 Int _optNightMultiplier
 Int _optWarmthReadout
+Int _optPenaltyReadout
 
 ; Food & Hunger
 Int _optFoodHeader
@@ -53,6 +54,7 @@ Quest Property SS_CoreQuest Auto
 
 String _currentWarmthDisplay = "--"
 String _currentRequirementDisplay = "--"
+String _currentPenaltyDisplay = "Health, Stamina, Magicka: 0%, Speed: 0%"
 
 ; ----------------------------
 ; MCM lifecycle
@@ -94,6 +96,7 @@ Event OnPageReset(String a_page)
     _optNightMultiplier   = AddSliderOption("Night multiplier", GetF("weather.cold.nightMultiplier"), "{2}")
 
     _optWarmthReadout = AddTextOption("Current warmth / req:", _currentWarmthDisplay)
+    _optPenaltyReadout = AddTextOption("Actual penalties applied", _currentPenaltyDisplay)
     RefreshWarmthReadout()
 
     AddEmptyOption()
@@ -151,10 +154,12 @@ Event OnOptionSelect(Int a_option)
   ElseIf a_option == _optDebugPing
     Int h = ModEvent.Create("SS_SetCold")
     If h
-      ModEvent.PushString(h, "-5.0") ; speed delta as string
-      ModEvent.PushFloat(h, 0.8)     ; regen multiplier as float
+      ModEvent.PushInt(h, 40)
+      ModEvent.PushInt(h, 40)
+      ModEvent.PushInt(h, 40)
+      ModEvent.PushInt(h, 20)
       ModEvent.Send(h)
-      Debug.Notification("SS: Ping sent (-5 speed, 0.8 regen)")
+      Debug.Notification("SS: Ping sent (test penalties)")
     EndIf
   EndIf
 EndEvent
@@ -354,6 +359,8 @@ EndEvent
 Event OnOptionHighlight(Int a_option)
   If a_option == _optWarmthReadout || a_option == _optWarmthReq
     RefreshWarmthReadout()
+  ElseIf a_option == _optPenaltyReadout
+    RefreshPenaltyReadout()
   EndIf
 EndEvent
 
@@ -412,6 +419,49 @@ Function RefreshWarmthReadout()
   If _optWarmthReadout != 0
     SetTextOptionValue(_optWarmthReadout, _currentWarmthDisplay)
   EndIf
+  RefreshPenaltyReadout()
+EndFunction
+
+Function RefreshPenaltyReadout()
+  UpdatePenaltyCache()
+  If _optPenaltyReadout != 0
+    SetTextOptionValue(_optPenaltyReadout, _currentPenaltyDisplay)
+  EndIf
+EndFunction
+
+Function UpdatePenaltyCache()
+  Int healthPct = 0
+  Int staminaPct = 0
+  Int magickaPct = 0
+  Int speedPct = 0
+
+  If SS_CoreQuest != None
+    SS_Controller controller = SS_CoreQuest as SS_Controller
+    If controller != None
+      healthPct = controller.LastHealthPenalty
+      staminaPct = controller.LastStaminaPenalty
+      magickaPct = controller.LastMagickaPenalty
+      speedPct = controller.LastSpeedPenalty
+    EndIf
+  EndIf
+
+  String healthStr = FormatPenaltyValue(healthPct)
+  String staminaStr = FormatPenaltyValue(staminaPct)
+  String magickaStr = FormatPenaltyValue(magickaPct)
+  String speedStr = FormatPenaltyValue(speedPct)
+
+  if healthStr == staminaStr && healthStr == magickaStr
+    _currentPenaltyDisplay = "Health, Stamina, Magicka: " + healthStr + ", Speed: " + speedStr
+  else
+    _currentPenaltyDisplay = "Health: " + healthStr + ", Stamina: " + staminaStr + ", Magicka: " + magickaStr + ", Speed: " + speedStr
+  endif
+EndFunction
+
+String Function FormatPenaltyValue(Int pct)
+  if pct <= 0
+    return "0%"
+  endif
+  return "-" + pct + "%"
 EndFunction
 
 Int Function RoundFloat(Float value)

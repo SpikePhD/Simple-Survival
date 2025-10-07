@@ -10,8 +10,13 @@ String Property CFG_PATH = "Data\\SKSE\\Plugins\\SS\\config.json" Auto
 Bool bTraceLogs = False
 
 ; ---- Internal tracking so we can revert cleanly ----
-Float appliedSpeedDelta = 0.0
-Float appliedRegenMult  = 1.0
+Int   appliedHealthPenaltyPct  = 0
+Int   appliedStaminaPenaltyPct = 0
+Int   appliedMagickaPenaltyPct = 0
+Int   appliedSpeedPenaltyPct   = 0
+Float appliedHealthMod = 0.0
+Float appliedStaminaMod = 0.0
+Float appliedMagickaMod = 0.0
 
 Actor PlayerRef
 
@@ -67,43 +72,36 @@ Event OnObjectUnequipped(Form akBaseObject, ObjectReference akRef)
   endif
 EndEvent
 
-Event OnColdEvent(String speedStr, Float regenMult)
+Event OnColdEvent(Int healthPenaltyPct, Int staminaPenaltyPct, Int magickaPenaltyPct, Int speedPenaltyPct)
   if PlayerRef == None
     return
   endif
 
-  ; --- parse speed ---
-  Float speedDelta = 0.0
-  if speedStr != ""
-    speedDelta = speedStr as Float
-  endif
+  healthPenaltyPct  = SanitizePenalty(healthPenaltyPct, 80)
+  staminaPenaltyPct = SanitizePenalty(staminaPenaltyPct, 80)
+  magickaPenaltyPct = SanitizePenalty(magickaPenaltyPct, 80)
+  speedPenaltyPct   = SanitizePenalty(speedPenaltyPct, 50)
 
-  ; --- apply speed (delta) ---
-  if speedDelta != appliedSpeedDelta
-    if appliedSpeedDelta != 0.0
-      PlayerRef.ModActorValue("SpeedMult", -appliedSpeedDelta)
-    endif
-    if speedDelta != 0.0
-      PlayerRef.ModActorValue("SpeedMult", speedDelta)
-    endif
-    appliedSpeedDelta = speedDelta
-  endif
+  ApplySpeedPenalty(speedPenaltyPct)
+  appliedHealthMod  = UpdateStatPenalty("Health",  healthPenaltyPct,  appliedHealthMod)
+  appliedStaminaMod = UpdateStatPenalty("Stamina", staminaPenaltyPct, appliedStaminaMod)
+  appliedMagickaMod = UpdateStatPenalty("Magicka", magickaPenaltyPct, appliedMagickaMod)
 
-  ; --- apply regen (absolute) ---
-  if regenMult <= 0.05
-    regenMult = 0.05
-  endif
-  if regenMult != appliedRegenMult
-    PlayerRef.SetActorValue("HealRateMult",    regenMult)
-    PlayerRef.SetActorValue("StaminaRateMult", regenMult)
-    PlayerRef.SetActorValue("MagickaRateMult", regenMult)
-    appliedRegenMult = regenMult
-  endif
+  appliedHealthPenaltyPct  = healthPenaltyPct
+  appliedStaminaPenaltyPct = staminaPenaltyPct
+  appliedMagickaPenaltyPct = magickaPenaltyPct
+  appliedSpeedPenaltyPct   = speedPenaltyPct
+
+  ApplyRegenPenalty("HealRateMult",    healthPenaltyPct)
+  ApplyRegenPenalty("StaminaRateMult", staminaPenaltyPct)
+  ApplyRegenPenalty("MagickaRateMult", magickaPenaltyPct)
 
   if bTraceLogs
     Float sm = PlayerRef.GetActorValue("SpeedMult")
     Float hr = PlayerRef.GetActorValue("HealRateMult")
-    Debug.Trace("[SS] Driver <- spd?=" + speedDelta + " | regenx=" + regenMult + " | post SpeedMult=" + sm + " HealRateMult=" + hr)
+    Float sr = PlayerRef.GetActorValue("StaminaRateMult")
+    Float mr = PlayerRef.GetActorValue("MagickaRateMult")
+    Debug.Trace("[SS] Driver <- hp=" + healthPenaltyPct + "% st=" + staminaPenaltyPct + "% mg=" + magickaPenaltyPct + "% speed=" + speedPenaltyPct + "% | post SpeedMult=" + sm + " HealRateMult=" + hr + " StaminaRateMult=" + sr + " MagickaRateMult=" + mr)
   endif
 EndEvent
 
@@ -118,14 +116,97 @@ Function ClearAll()
   if PlayerRef == None
     return
   endif
-  if appliedSpeedDelta != 0.0
-    PlayerRef.ModActorValue("SpeedMult", -appliedSpeedDelta)
-    appliedSpeedDelta = 0.0
+  if appliedSpeedPenaltyPct != 0
+    PlayerRef.ModActorValue("SpeedMult", appliedSpeedPenaltyPct)
+    appliedSpeedPenaltyPct = 0
   endif
-  if appliedRegenMult != 1.0
-    PlayerRef.SetActorValue("HealRateMult",    1.0)
-    PlayerRef.SetActorValue("StaminaRateMult", 1.0)
-    PlayerRef.SetActorValue("MagickaRateMult", 1.0)
-    appliedRegenMult = 1.0
+
+  if appliedHealthMod > 0.0
+    PlayerRef.ModActorValue("Health", appliedHealthMod)
+    appliedHealthMod = 0.0
   endif
+  if appliedStaminaMod > 0.0
+    PlayerRef.ModActorValue("Stamina", appliedStaminaMod)
+    appliedStaminaMod = 0.0
+  endif
+  if appliedMagickaMod > 0.0
+    PlayerRef.ModActorValue("Magicka", appliedMagickaMod)
+    appliedMagickaMod = 0.0
+  endif
+
+  PlayerRef.SetActorValue("HealRateMult",    1.0)
+  PlayerRef.SetActorValue("StaminaRateMult", 1.0)
+  PlayerRef.SetActorValue("MagickaRateMult", 1.0)
+
+  appliedHealthPenaltyPct  = 0
+  appliedStaminaPenaltyPct = 0
+  appliedMagickaPenaltyPct = 0
+EndFunction
+
+Function ApplySpeedPenalty(Int newPenaltyPct)
+  if PlayerRef == None
+    return
+  endif
+  if appliedSpeedPenaltyPct != 0
+    PlayerRef.ModActorValue("SpeedMult", appliedSpeedPenaltyPct)
+    appliedSpeedPenaltyPct = 0
+  endif
+  if newPenaltyPct > 0
+    PlayerRef.ModActorValue("SpeedMult", -newPenaltyPct)
+    appliedSpeedPenaltyPct = newPenaltyPct
+  endif
+EndFunction
+
+Float Function UpdateStatPenalty(String avName, Int newPenaltyPct, Float previousAppliedMod)
+  if PlayerRef == None
+    return 0.0
+  endif
+  if previousAppliedMod > 0.0
+    PlayerRef.ModActorValue(avName, previousAppliedMod)
+  endif
+
+  if newPenaltyPct <= 0
+    return 0.0
+  endif
+
+  Float baseValue = PlayerRef.GetBaseActorValue(avName)
+  if baseValue <= 0.0
+    return 0.0
+  endif
+
+  Float newMod = baseValue * (newPenaltyPct as Float) * 0.01
+  if newMod > baseValue
+    newMod = baseValue
+  endif
+  if newMod > 0.0
+    PlayerRef.ModActorValue(avName, -newMod)
+  endif
+  return newMod
+EndFunction
+
+Function ApplyRegenPenalty(String rateAV, Int penaltyPct)
+  if PlayerRef == None
+    return
+  endif
+  Float mult = 1.0
+  if penaltyPct > 0
+    mult = 1.0 - (penaltyPct as Float) * 0.01
+    if mult < 0.2
+      mult = 0.2
+    endif
+  endif
+  PlayerRef.SetActorValue(rateAV, mult)
+EndFunction
+
+Int Function SanitizePenalty(Int value, Int maxAllowed)
+  if value < 5
+    return 0
+  endif
+  if value > maxAllowed
+    return maxAllowed
+  endif
+  if value < 0
+    return 0
+  endif
+  return value
 EndFunction
