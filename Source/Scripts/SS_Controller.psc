@@ -5,9 +5,7 @@ Scriptname SS_Controller extends Quest
 ; =======================
 Import JsonUtil
 Import StringUtil
-Import MiscUtil
 Import Math
-Import SS_SnowNative
 String Property CFG_PATH = "Data\\SKSE\\Plugins\\SS\\config.json" Auto
 
 ; =======================
@@ -161,14 +159,14 @@ Event OnUpdateGameTime()
   ; ---- read config ----
   Bool  coldOn    = GetB("weather.cold.enable", True)
   Float baseRequirement = ReadBaseRequirement()
-  Float weatherBonus = GetWeatherDemandBonus(p)
-  Float safeReq     = baseRequirement + weatherBonus
+  Float safeReq     = ComputeWarmthRequirement(p, baseRequirement)
+  Float modifierSum = safeReq - baseRequirement
   Float autoPer   = GetF("weather.cold.autoWarmthPerPiece", 100.0)
   Float coldTick  = GetF("weather.cold.tick", 0.0) ; optional hp bleed per tick at max deficit
 
   LastBaseRequirement = baseRequirement
   LastSafeRequirement = safeReq
-  LastWeatherBonus    = weatherBonus
+  LastWeatherBonus    = modifierSum
 
   ; ---- warmth/deficit from gear ----
   Float warmth = GetPlayerWarmthScoreV1(p, autoPer)
@@ -201,7 +199,7 @@ Event OnUpdateGameTime()
       ModEvent.Send(h)
 
       if bDebugEnabled
-        String msg = "[SS] warm=" + warmth + " / req=" + baseRequirement + " + weather=" + weatherBonus + " => " + safeReq + " | def=" + deficit + " | spd?=" + speedDelta + " | regenx=" + regenMult
+        String msg = "[SS] warm=" + warmth + " / req=" + baseRequirement + " + modifiers=" + modifierSum + " => " + safeReq + " | def=" + deficit + " | spd?=" + speedDelta + " | regenx=" + regenMult
         if bTraceLogs
           Debug.Trace(msg)
         else
@@ -330,99 +328,92 @@ Function EnsurePlayerHasAbility()
 EndFunction
 
 ; =======================
-; Weather demand helpers
-; =======================
+; Warmth demand helpers
+; =====================
 
-Float Function GetWeatherDemandBonus(Actor p)
-  Float bonus = 0.0
+Float Function ComputeWarmthRequirement(Actor p, Float baseRequirement)
+  Float requirement = baseRequirement
 
-  if p == None
-    return bonus
+  Int regionClass = GetRegionClassification()
+  requirement += GetRegionContribution(regionClass)
+
+  Int weatherClass = GetWeatherClassification()
+  requirement += GetWeatherContribution(weatherClass)
+
+  Float exteriorAdjust = GetF("weather.cold.exteriorAdjust", 0.0)
+  Float interiorAdjust = GetF("weather.cold.interiorAdjust", 0.0)
+
+  if p != None && p.IsInInterior()
+    requirement += interiorAdjust
+  else
+    requirement += exteriorAdjust
   endif
 
-  ; Snowy terrain bonus via SS_SnowNative
-  Float terrainBonus = GetF("weather.cold.environmentSnowBonus", 0.0)
-  if terrainBonus != 0.0 && IsPlayerInSnow(p)
-    bonus += terrainBonus
+  if requirement < 0.0
+    requirement = 0.0
   endif
 
-  if p.IsSwimming()
-    Float swimPenalty = GetF("weather.cold.swimPenalty", 0.0)
-    if swimPenalty != 0.0
-      bonus += swimPenalty
-    endif
+  if IsNightTime()
+    Float nightMult = GetNightMultiplier()
+    requirement *= nightMult
   endif
 
-  Bool isNight = IsNightTime()
-  if isNight
-    Float nightPenalty = GetF("weather.cold.nightPenalty", 0.0)
-    if nightPenalty != 0.0
-      bonus += nightPenalty
-    endif
-  endif
-
-  if p.IsInInterior()
-    return bonus
-  endif
-
-  Weather current = Weather.GetCurrentWeather()
-  Int classification = -1
-  if current != None
-    classification = current.GetClassification()
-  endif
-
-  if !isNight
-    Float sunPenalty = GetF("weather.cold.sunPenalty", 0.0)
-    if sunPenalty != 0.0 && classification == 0
-      bonus += sunPenalty
-    endif
-  endif
-
-  Float rainPenalty = GetF("weather.cold.rainPenalty", 0.0)
-  if rainPenalty != 0.0 && classification == 2
-    bonus += rainPenalty
-  endif
-
-  Float snowPenalty = GetF("weather.cold.snowPenalty", 0.0)
-  if snowPenalty != 0.0 && classification == 3
-    bonus += snowPenalty
-  endif
-
-  Float windPenalty = GetF("weather.cold.windPenalty", 0.0)
-  if windPenalty != 0.0 && current != None
-    Float windThreshold = GetF("weather.cold.windDetection.minRange", 45.0)
-    if windThreshold < 0.0
-      windThreshold = 0.0
-    endif
-    Float windRange = current.GetWindDirectionRange()
-    if windRange >= windThreshold
-      bonus += windPenalty
-    endif
-  endif
-
-  return bonus
+  return requirement
 EndFunction
 
-Bool Function IsPlayerInSnow(Actor p)
-  if p == None
-    return False
-  endif
+Int Function GetRegionClassification()
+  Int idx = 3
+  while idx >= 0
+    Weather candidate = Weather.FindWeather(idx)
+    if candidate != None
+      return idx
+    endif
+    idx -= 1
+  endwhile
 
-  Float radius = GetF("weather.cold.snowDetection.radius", 120.0)
-  Int raysPerRing = GetI("weather.cold.snowDetection.raysPerRing", 12)
-  Float threshold = GetF("weather.cold.snowDetection.threshold", 50.0)
+  return 0
+EndFunction
 
-  if radius < 0.0
-    radius = 0.0
+Int Function GetWeatherClassification()
+  Weather current = Weather.GetCurrentWeather()
+  if current != None
+    return current.GetClassification()
   endif
-  if raysPerRing < 0
-    raysPerRing = 0
-  endif
-  if threshold < 0.0
-    threshold = 0.0
-  endif
+  return -1
+EndFunction
 
-  return SS_SnowNative.IsSnowy(p as ObjectReference, radius, raysPerRing, threshold)
+Float Function GetRegionContribution(Int classification)
+  if classification == 0
+    return GetF("weather.cold.region.pleasant", 0.0)
+  elseif classification == 1
+    return GetF("weather.cold.region.cloudy", 0.0)
+  elseif classification == 2
+    return GetF("weather.cold.region.rainy", 0.0)
+  elseif classification == 3
+    return GetF("weather.cold.region.snowy", 0.0)
+  endif
+  return 0.0
+EndFunction
+
+Float Function GetWeatherContribution(Int classification)
+  if classification == 0
+    return GetF("weather.cold.weather.pleasant", 0.0)
+  elseif classification == 1
+    return GetF("weather.cold.weather.cloudy", 0.0)
+  elseif classification == 2
+    return GetF("weather.cold.weather.rainy", 0.0)
+  elseif classification == 3
+    return GetF("weather.cold.weather.snowy", 0.0)
+  endif
+  return 0.0
+EndFunction
+
+Float Function GetNightMultiplier()
+  Float mult = GetF("weather.cold.nightMultiplier", 1.0)
+  if mult < 1.0
+    mult = 1.0
+  endif
+  return mult
 EndFunction
 
 Bool Function IsNightTime()
@@ -436,16 +427,6 @@ Bool Function IsNightTime()
     return True
   endif
   return False
-EndFunction
-
-Float Function DegreesToRadians(Float degrees)
-  return degrees * 0.0174532925
-EndFunction
-
-Float Function GetCurrentWeatherDemand(Float baseRequirement)
-  Actor p = Game.GetPlayer()
-  Float weatherBonus = GetWeatherDemandBonus(p)
-  return baseRequirement + weatherBonus
 EndFunction
 
 Float Function ReadBaseRequirement()
@@ -604,66 +585,65 @@ Function InitConfigDefaults()
     JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.autoWarmthPerPiece", 100.0)
   endif
 
-  ; additive weather penalties
+  ; additive weather modifiers
   f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.baseRequirement", -9999.0)
   if f == -9999.0
-    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.baseRequirement", 0.0)
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.baseRequirement", 200.0)
   endif
 
-  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.rainPenalty", -9999.0)
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.region.pleasant", -9999.0)
   if f == -9999.0
-    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.rainPenalty", 50.0)
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.region.pleasant", 0.0)
   endif
 
-  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.snowPenalty", -9999.0)
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.region.cloudy", -9999.0)
   if f == -9999.0
-    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.snowPenalty", 100.0)
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.region.cloudy", 30.0)
   endif
 
-  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.sunPenalty", -9999.0)
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.region.rainy", -9999.0)
   if f == -9999.0
-    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.sunPenalty", 0.0)
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.region.rainy", 60.0)
   endif
 
-  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.nightPenalty", -9999.0)
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.region.snowy", -9999.0)
   if f == -9999.0
-    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.nightPenalty", 75.0)
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.region.snowy", 120.0)
   endif
 
-  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.windPenalty", -9999.0)
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.weather.pleasant", -9999.0)
   if f == -9999.0
-    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.windPenalty", 40.0)
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.weather.pleasant", 0.0)
   endif
 
-  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.environmentSnowBonus", -9999.0)
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.weather.cloudy", -9999.0)
   if f == -9999.0
-    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.environmentSnowBonus", 120.0)
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.weather.cloudy", 25.0)
   endif
 
-  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.swimPenalty", -9999.0)
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.weather.rainy", -9999.0)
   if f == -9999.0
-    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.swimPenalty", 75.0)
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.weather.rainy", 75.0)
   endif
 
-  ; snow detection defaults (SS_SnowNative parameters)
-  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.snowDetection.radius", -9999.0)
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.weather.snowy", -9999.0)
   if f == -9999.0
-    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.snowDetection.radius", 160.0)
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.weather.snowy", 125.0)
   endif
 
-  Int raysPerRing = JsonUtil.GetPathIntValue(CFG_PATH, "weather.cold.snowDetection.raysPerRing", -9999)
-  if raysPerRing == -9999
-    JsonUtil.SetPathIntValue(CFG_PATH, "weather.cold.snowDetection.raysPerRing", 12)
-  endif
-
-  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.snowDetection.threshold", -9999.0)
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.exteriorAdjust", -9999.0)
   if f == -9999.0
-    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.snowDetection.threshold", 50.0)
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.exteriorAdjust", 50.0)
   endif
 
-  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.windDetection.minRange", -9999.0)
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.interiorAdjust", -9999.0)
   if f == -9999.0
-    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.windDetection.minRange", 35.0)
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.interiorAdjust", -50.0)
+  endif
+
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.nightMultiplier", -9999.0)
+  if f == -9999.0
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.nightMultiplier", 1.25)
   endif
 
   ; cold.enable
