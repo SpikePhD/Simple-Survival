@@ -174,11 +174,6 @@ EndEvent
 ; ----------------------------
 ; Sliders - open dialog with proper ranges
 ; ----------------------------
-  EndIf
-  If refreshNeeded
-    RequestControllerRefresh()
-  EndIf
-EndEvent
 Event OnOptionSliderOpen(Int a_option)
   If a_option == _optBaseWarmth
     SetSliderDialogStartValue(GetF("weather.cold.baseRequirement"))
@@ -394,7 +389,10 @@ Event OnOptionHighlight(Int a_option)
   EndIf
 EndEvent
 
-Event OnConfigClose()`n  RefreshWarmthReadout()`n  RequestControllerRefresh()`nEndEvent
+Event OnConfigClose()
+  RefreshWarmthReadout()
+  RequestControllerRefresh()
+EndEvent
 
 Function UpdateWarmthCache()
   Float baseReq = GetF("weather.cold.baseRequirement")
