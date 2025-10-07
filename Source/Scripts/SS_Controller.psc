@@ -1,0 +1,708 @@
+Scriptname SS_Controller extends Quest
+
+; =======================
+; Imports / Config Path
+; =======================
+Import JsonUtil
+Import StringUtil
+Import MiscUtil
+Import Math
+Import SS_SnowNative
+String Property CFG_PATH = "Data\\SKSE\\Plugins\\SS\\config.json" Auto
+
+; =======================
+; Ability / Forms / Keywords
+; =======================
+Spell    Property SS_PlayerAbility    Auto    ; fill in CK with your hidden ability (has SS_AbilityDriver on its MGEF)
+
+; =======================
+; Runtime flags
+; =======================
+Bool  bRunning = False
+Float Property LastWarmth Auto
+Float Property LastSafeRequirement Auto
+Float Property LastWeatherBonus Auto
+Float Property LastBaseRequirement Auto
+
+; --- Debug ---
+Bool  bDebugEnabled = False
+Bool  bTraceLogs    = False
+
+; --- Cadence control (adaptive) ---
+Bool  bAdaptiveTick = True       ; can expose via MCM later
+Float kFastTickH    = 0.0167     ; ~60 in-game seconds
+Float kNormalTickH  = 0.10       ; 6  in-game minutes
+Float kSlowTickH    = 0.40       ; 24 in-game minutes
+Float kColdDrainFrac = 0.05
+Float kColdFloorFrac = 0.20
+
+; --- Swim change nudge ---
+Bool wasSwimming = False
+
+; --- Warmth scoring constants ---
+Float kBaseWarmthBody  = 50.0
+Float kBaseWarmthHead  = 25.0
+Float kBaseWarmthHands = 25.0
+Float kBaseWarmthFeet  = 25.0
+
+String[] kWarmthKeywordNames
+Float[]  kWarmthKeywordBonuses
+Bool     bWarmthKeywordsReady = False
+
+Function InitWarmthKeywords()
+  Int keywordCount = 24
+
+  if kWarmthKeywordNames == None || kWarmthKeywordNames.Length != keywordCount
+    kWarmthKeywordNames = Utility.CreateStringArray(keywordCount)
+    bWarmthKeywordsReady = False
+  endif
+
+  if kWarmthKeywordBonuses == None || kWarmthKeywordBonuses.Length != keywordCount
+    kWarmthKeywordBonuses = Utility.CreateFloatArray(keywordCount)
+    bWarmthKeywordsReady = False
+  endif
+
+  if bWarmthKeywordsReady
+    return
+  endif
+
+  if kWarmthKeywordNames != None && kWarmthKeywordBonuses != None
+    kWarmthKeywordNames[0] = "leather"
+    kWarmthKeywordBonuses[0] = 50.0
+    kWarmthKeywordNames[1] = "hide"
+    kWarmthKeywordBonuses[1] = 50.0
+    kWarmthKeywordNames[2] = "fur"
+    kWarmthKeywordBonuses[2] = 40.0
+    kWarmthKeywordNames[3] = "pelt"
+    kWarmthKeywordBonuses[3] = 40.0
+    kWarmthKeywordNames[4] = "bear"
+    kWarmthKeywordBonuses[4] = 55.0
+    kWarmthKeywordNames[5] = "wolf"
+    kWarmthKeywordBonuses[5] = 45.0
+    kWarmthKeywordNames[6] = "stormcloak"
+    kWarmthKeywordBonuses[6] = 55.0
+    kWarmthKeywordNames[7] = "imperial"
+    kWarmthKeywordBonuses[7] = 35.0
+    kWarmthKeywordNames[8] = "studded"
+    kWarmthKeywordBonuses[8] = 30.0
+    kWarmthKeywordNames[9] = "scaled"
+    kWarmthKeywordBonuses[9] = 35.0
+    kWarmthKeywordNames[10] = "guard"
+    kWarmthKeywordBonuses[10] = 30.0
+    kWarmthKeywordNames[11] = "daedric"
+    kWarmthKeywordBonuses[11] = 70.0
+    kWarmthKeywordNames[12] = "dragonplate"
+    kWarmthKeywordBonuses[12] = 70.0
+    kWarmthKeywordNames[13] = "dragonscale"
+    kWarmthKeywordBonuses[13] = 65.0
+    kWarmthKeywordNames[14] = "stalhrim"
+    kWarmthKeywordBonuses[14] = 65.0
+    kWarmthKeywordNames[15] = "ebony"
+    kWarmthKeywordBonuses[15] = 60.0
+    kWarmthKeywordNames[16] = "orcish"
+    kWarmthKeywordBonuses[16] = 45.0
+    kWarmthKeywordNames[17] = "dwarven"
+    kWarmthKeywordBonuses[17] = 40.0
+    kWarmthKeywordNames[18] = "iron"
+    kWarmthKeywordBonuses[18] = 15.0
+    kWarmthKeywordNames[19] = "steel"
+    kWarmthKeywordBonuses[19] = 20.0
+    kWarmthKeywordNames[20] = "elven"
+    kWarmthKeywordBonuses[20] = 35.0
+    kWarmthKeywordNames[21] = "glass"
+    kWarmthKeywordBonuses[21] = 45.0
+    kWarmthKeywordNames[22] = "chitin"
+    kWarmthKeywordBonuses[22] = 35.0
+    kWarmthKeywordNames[23] = "bonemold"
+    kWarmthKeywordBonuses[23] = 40.0
+
+    bWarmthKeywordsReady = True
+  endif
+
+EndFunction
+
+; =======================
+; Lifecycle
+; =======================
+Event OnInit()
+  InitWarmthKeywords()
+  InitConfigDefaults()
+  ApplyDebugFlags()
+  EnsurePlayerHasAbility()
+  bRunning = True
+  ; schedule first tick quickly so player feels it
+  RegisterForSingleUpdateGameTime(kFastTickH)
+  if bTraceLogs
+    Debug.Trace("[SS] Controller OnInit: ability ensured, first tick scheduled fast")
+  endif
+  ; instant reactions on gear changes
+  RegisterForModEvent("SS_QuickTick", "OnQuickTick")
+EndEvent
+
+Event OnUpdateGameTime()
+  if !bRunning
+    return
+  endif
+
+  Actor p = Game.GetPlayer()
+  if p == None
+    LastWarmth = 0.0
+    LastSafeRequirement = 0.0
+    LastWeatherBonus = 0.0
+    LastBaseRequirement = 0.0
+    RegisterForSingleUpdateGameTime(kNormalTickH)
+    return
+  endif
+
+  if bTraceLogs
+    Debug.Trace("[SS] Tick start")
+  endif
+
+  ; ---- read config ----
+  Bool  coldOn    = GetB("weather.cold.enable", True)
+  Float baseRequirement = ReadBaseRequirement()
+  Float weatherBonus = GetWeatherDemandBonus(p)
+  Float safeReq     = baseRequirement + weatherBonus
+  Float autoPer   = GetF("weather.cold.autoWarmthPerPiece", 100.0)
+  Float coldTick  = GetF("weather.cold.tick", 0.0) ; optional hp bleed per tick at max deficit
+
+  LastBaseRequirement = baseRequirement
+  LastSafeRequirement = safeReq
+  LastWeatherBonus    = weatherBonus
+
+  ; ---- warmth/deficit from gear ----
+  Float warmth = GetPlayerWarmthScoreV1(p, autoPer)
+  LastWarmth = warmth
+  Float deficit = 0.0
+  if warmth < safeReq
+    deficit = safeReq - warmth
+  endif
+
+  ; ---- penalties mapping ----
+  Float regenAt100 = 0.18  ; -18% regen at 100 deficit
+  Float speedAt100 = 5.0   ; -5 SpeedMult points at 100 deficit
+
+  Float regenPenalty = (deficit / 100.0) * regenAt100
+  if regenPenalty > 0.90
+    regenPenalty = 0.90
+  endif
+  Float speedPenalty = (deficit / 100.0) * speedAt100
+
+  Float regenMult  = 1.0 - regenPenalty   ; 0..1
+  Float speedDelta = -speedPenalty        ; negative = slower
+
+  ; ---- apply or clear via driver ----
+  if coldOn
+    int h = ModEvent.Create("SS_SetCold")
+    if h
+      String speedStr = "" + speedDelta       ; pack speed as string
+      ModEvent.PushString(h, speedStr)        ; arg1: string
+      ModEvent.PushFloat(h,  regenMult)       ; arg2: float
+      ModEvent.Send(h)
+
+      if bDebugEnabled
+        String msg = "[SS] warm=" + warmth + " / req=" + baseRequirement + " + weather=" + weatherBonus + " => " + safeReq + " | def=" + deficit + " | spd?=" + speedDelta + " | regenx=" + regenMult
+        if bTraceLogs
+          Debug.Trace(msg)
+        else
+          Debug.Notification(msg)
+        endif
+      endif
+
+      if bTraceLogs
+        Debug.Trace("[SS] Sent SS_SetCold | speedDelta=" + speedDelta + " regenMult=" + regenMult)
+      endif
+    endif
+
+    ; optional HP bleed (scaled by relative deficit)
+    if coldTick > 0.0 && deficit > 0.0
+      Float denom = safeReq
+      if denom <= 0.0
+        denom = 1.0
+      endif
+      Float scale = deficit / denom
+      p.DamageActorValue("Health", coldTick * scale)
+    endif
+
+    if coldOn && deficit > 0.0
+      ApplyColdResourceDrain(p)
+    endif
+  else
+    int h2 = ModEvent.Create("SS_ClearCold")
+    if h2
+      ModEvent.Send(h2)
+      if bDebugEnabled
+        Debug.Notification("[SS] cold OFF -> clear penalties")
+      endif
+      if bTraceLogs
+        Debug.Trace("[SS] Sent SS_ClearCold")
+      endif
+    endif
+  endif
+
+  ; ---- adaptive cadence decision for next tick ----
+  Float next = kNormalTickH
+  if !p.IsInInterior()
+    if deficit > 0.0
+      next = kFastTickH
+    else
+      next = kNormalTickH
+    endif
+  else
+    next = kSlowTickH
+  endif
+
+  RegisterForSingleUpdateGameTime(next)
+EndEvent
+
+Function ApplyColdResourceDrain(Actor p)
+  if p == None || p.IsDead() || !p.Is3DLoaded()
+    return
+  endif
+
+  String[] avNames = new String[3]
+  avNames[0] = "Health"
+  avNames[1] = "Stamina"
+  avNames[2] = "Magicka"
+
+  Int i = 0
+  while i < avNames.Length
+    String av = avNames[i]
+    Float current = p.GetActorValue(av)
+    Float percent = p.GetActorValuePercentage(av)
+    if percent > 0.0
+      Float maxValue = current / percent
+      if maxValue > 0.0
+        Float floorValue = maxValue * kColdFloorFrac
+        if current > floorValue
+          Float drain = maxValue * kColdDrainFrac
+          if current - drain < floorValue
+            drain = current - floorValue
+          endif
+          if drain > 0.0
+            p.DamageActorValue(av, drain)
+            if bTraceLogs
+              Debug.Trace("[SS] Cold drain " + av + ": current=" + current + " max=" + maxValue + " drain=" + drain + " floor=" + floorValue)
+            endif
+          endif
+        elseif bTraceLogs
+          Debug.Trace("[SS] Cold drain skipped for " + av + " (at or below floor)")
+        endif
+      endif
+    elseif bTraceLogs
+      Debug.Trace("[SS] Cold drain skipped for " + av + " (percent=" + percent + ")")
+    endif
+    i += 1
+  endwhile
+EndFunction
+
+; =======================
+; Instant wake-ups (equip/swim)
+; =======================
+
+; Call at the start of UpdateCold-like logic if you later add weather/wetness.
+; For the lean v2 (gear-only), we still react to swim transitions for snappiness.
+Function NudgeOnSwimChange(Actor p)
+  Bool nowSwimming = p.IsSwimming()
+  if nowSwimming != wasSwimming
+    RegisterForSingleUpdateGameTime(kFastTickH)
+    if bTraceLogs
+      Debug.Trace("[SS] Swim state changed -> quick tick")
+    endif
+  endif
+  wasSwimming = nowSwimming
+EndFunction
+
+; =======================
+; Ability ensure
+; =======================
+Function EnsurePlayerHasAbility()
+  Actor p = Game.GetPlayer()
+  if p == None || SS_PlayerAbility == None
+    return
+  endif
+  if !p.HasSpell(SS_PlayerAbility)
+    p.AddSpell(SS_PlayerAbility, False)
+    if bTraceLogs
+      Debug.Trace("[SS] Gave player SS_PlayerAbility")
+    endif
+  endif
+EndFunction
+
+; =======================
+; Weather demand helpers
+; =======================
+
+Float Function GetWeatherDemandBonus(Actor p)
+  Float bonus = 0.0
+
+  if p == None
+    return bonus
+  endif
+
+  ; Snowy terrain bonus via SS_SnowNative
+  Float terrainBonus = GetF("weather.cold.environmentSnowBonus", 0.0)
+  if terrainBonus != 0.0 && IsPlayerInSnow(p)
+    bonus += terrainBonus
+  endif
+
+  if p.IsSwimming()
+    Float swimPenalty = GetF("weather.cold.swimPenalty", 0.0)
+    if swimPenalty != 0.0
+      bonus += swimPenalty
+    endif
+  endif
+
+  Bool isNight = IsNightTime()
+  if isNight
+    Float nightPenalty = GetF("weather.cold.nightPenalty", 0.0)
+    if nightPenalty != 0.0
+      bonus += nightPenalty
+    endif
+  endif
+
+  if p.IsInInterior()
+    return bonus
+  endif
+
+  Weather current = Weather.GetCurrentWeather()
+  Int classification = -1
+  if current != None
+    classification = current.GetClassification()
+  endif
+
+  if !isNight
+    Float sunPenalty = GetF("weather.cold.sunPenalty", 0.0)
+    if sunPenalty != 0.0 && classification == 0
+      bonus += sunPenalty
+    endif
+  endif
+
+  Float rainPenalty = GetF("weather.cold.rainPenalty", 0.0)
+  if rainPenalty != 0.0 && classification == 2
+    bonus += rainPenalty
+  endif
+
+  Float snowPenalty = GetF("weather.cold.snowPenalty", 0.0)
+  if snowPenalty != 0.0 && classification == 3
+    bonus += snowPenalty
+  endif
+
+  Float windPenalty = GetF("weather.cold.windPenalty", 0.0)
+  if windPenalty != 0.0 && current != None
+    Float windThreshold = GetF("weather.cold.windDetection.minRange", 45.0)
+    if windThreshold < 0.0
+      windThreshold = 0.0
+    endif
+    Float windRange = current.GetWindDirectionRange()
+    if windRange >= windThreshold
+      bonus += windPenalty
+    endif
+  endif
+
+  return bonus
+EndFunction
+
+Bool Function IsPlayerInSnow(Actor p)
+  if p == None
+    return False
+  endif
+
+  Float radius = GetF("weather.cold.snowDetection.radius", 120.0)
+  Int raysPerRing = GetI("weather.cold.snowDetection.raysPerRing", 12)
+  Float threshold = GetF("weather.cold.snowDetection.threshold", 50.0)
+
+  if radius < 0.0
+    radius = 0.0
+  endif
+  if raysPerRing < 0
+    raysPerRing = 0
+  endif
+  if threshold < 0.0
+    threshold = 0.0
+  endif
+
+  return SS_SnowNative.IsSnowy(p as ObjectReference, radius, raysPerRing, threshold)
+EndFunction
+
+Bool Function IsNightTime()
+  Float currentTime = Utility.GetCurrentGameTime()
+  Float fractional = currentTime - Math.Floor(currentTime)
+  Float hour = fractional * 24.0
+  if hour < 6.0
+    return True
+  endif
+  if hour >= 20.0
+    return True
+  endif
+  return False
+EndFunction
+
+Float Function DegreesToRadians(Float degrees)
+  return degrees * 0.0174532925
+EndFunction
+
+Float Function GetCurrentWeatherDemand(Float baseRequirement)
+  Actor p = Game.GetPlayer()
+  Float weatherBonus = GetWeatherDemandBonus(p)
+  return baseRequirement + weatherBonus
+EndFunction
+
+Float Function ReadBaseRequirement()
+  Float sentinel = -12345.0
+  Float baseRequirement = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.baseRequirement", sentinel)
+  if baseRequirement == sentinel
+    baseRequirement = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.safeThreshold", 0.0)
+  endif
+  return baseRequirement
+EndFunction
+
+Float Function GetLastSafeRequirement()
+  return LastSafeRequirement
+EndFunction
+
+Float Function GetLastWeatherBonus()
+  return LastWeatherBonus
+EndFunction
+
+; =======================
+; Warmth scoring (lean/auto)
+; =======================
+Float Function GetLastWarmth()
+  return LastWarmth
+EndFunction
+
+Float Function GetPlayerWarmthScoreV1(Actor p, Float perPiece)
+  InitWarmthKeywords()
+  if p == None
+    return 0.0
+  endif
+
+  Float total = 0.0
+  total += ComputePieceWarmth(p, 0x00000004, kBaseWarmthBody)
+  total += ComputePieceWarmth(p, 0x00000001, kBaseWarmthHead, GetHeadGear(p))
+  total += ComputePieceWarmth(p, 0x00000008, kBaseWarmthHands)
+  total += ComputePieceWarmth(p, 0x00000080, kBaseWarmthFeet)
+
+  if perPiece > 0.0 && perPiece != 100.0
+    total *= (perPiece / 100.0)
+  endif
+
+  return total
+EndFunction
+
+Armor Function GetHeadGear(Actor wearer)
+  if wearer == None
+    return None
+  endif
+
+  Armor gear = wearer.GetWornForm(0x00000001) as Armor
+  if gear != None
+    return gear
+  endif
+
+  gear = wearer.GetWornForm(0x00000002) as Armor
+  if gear != None
+    return gear
+  endif
+
+  return wearer.GetWornForm(0x00001000) as Armor
+EndFunction
+
+Float Function ComputePieceWarmth(Actor wearer, Int slotMask, Float baseWarmth, Armor preFetched = None)
+  if wearer == None
+    return 0.0
+  endif
+
+  Armor a = preFetched
+  if a == None
+    a = wearer.GetWornForm(slotMask) as Armor
+  endif
+  if a == None
+    return 0.0
+  endif
+
+  Float warmth = baseWarmth
+  String rawName = a.GetName()
+  if rawName != ""
+    String lowerName = NormalizeWarmthName(rawName)
+    Int i = 0
+    while i < kWarmthKeywordNames.Length
+      String keywordName = kWarmthKeywordNames[i]
+      if keywordName != ""
+        if StringUtil.Find(lowerName, keywordName) >= 0
+          Float bonus = 0.0
+          if i < kWarmthKeywordBonuses.Length
+            bonus = kWarmthKeywordBonuses[i]
+          endif
+          warmth += bonus
+        endif
+      endif
+      i += 1
+    endwhile
+  endif
+
+  return warmth
+EndFunction
+
+String Function NormalizeWarmthName(String rawName)
+  if rawName == ""
+    return rawName
+  endif
+
+  String uppercaseChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  String lowercaseChars = "abcdefghijklmnopqrstuvwxyz"
+  Int nameLength = StringUtil.GetLength(rawName)
+  Int index = 0
+  String normalizedName = ""
+  while index < nameLength
+    String currentChar = StringUtil.GetNthChar(rawName, index)
+    Int uppercaseIndex = StringUtil.Find(uppercaseChars, currentChar)
+    if uppercaseIndex >= 0
+      String lowerChar = StringUtil.GetNthChar(lowercaseChars, uppercaseIndex)
+      normalizedName += lowerChar
+    else
+      normalizedName += currentChar
+    endif
+    index += 1
+  endwhile
+
+  return normalizedName
+EndFunction
+
+; =======================
+; Config I/O (portable)
+; =======================
+Bool Function GetB(String path, Bool fallback = True)
+  ; tolerant bool read (ints 0/1 or bool)
+  Int sentinel = -12345
+  Int asInt = JsonUtil.GetPathIntValue(CFG_PATH, path, sentinel)
+  if asInt != sentinel
+    return asInt > 0
+  endif
+  return JsonUtil.GetPathBoolValue(CFG_PATH, path, fallback)
+EndFunction
+
+Float Function GetF(String path, Float fallback = 0.0)
+  return JsonUtil.GetPathFloatValue(CFG_PATH, path, fallback)
+EndFunction
+
+Int Function GetI(String path, Int fallback = 0)
+  return JsonUtil.GetPathIntValue(CFG_PATH, path, fallback)
+EndFunction
+
+Function InitConfigDefaults()
+  ; safeThreshold (legacy compatibility)
+  Float f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.safeThreshold", -9999.0)
+  if f == -9999.0
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.safeThreshold", 0.0)
+  endif
+
+  ; autoWarmthPerPiece
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.autoWarmthPerPiece", -9999.0)
+  if f == -9999.0
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.autoWarmthPerPiece", 100.0)
+  endif
+
+  ; additive weather penalties
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.baseRequirement", -9999.0)
+  if f == -9999.0
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.baseRequirement", 0.0)
+  endif
+
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.rainPenalty", -9999.0)
+  if f == -9999.0
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.rainPenalty", 50.0)
+  endif
+
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.snowPenalty", -9999.0)
+  if f == -9999.0
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.snowPenalty", 100.0)
+  endif
+
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.sunPenalty", -9999.0)
+  if f == -9999.0
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.sunPenalty", 0.0)
+  endif
+
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.nightPenalty", -9999.0)
+  if f == -9999.0
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.nightPenalty", 75.0)
+  endif
+
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.windPenalty", -9999.0)
+  if f == -9999.0
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.windPenalty", 40.0)
+  endif
+
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.environmentSnowBonus", -9999.0)
+  if f == -9999.0
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.environmentSnowBonus", 120.0)
+  endif
+
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.swimPenalty", -9999.0)
+  if f == -9999.0
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.swimPenalty", 75.0)
+  endif
+
+  ; snow detection defaults (SS_SnowNative parameters)
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.snowDetection.radius", -9999.0)
+  if f == -9999.0
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.snowDetection.radius", 160.0)
+  endif
+
+  Int raysPerRing = JsonUtil.GetPathIntValue(CFG_PATH, "weather.cold.snowDetection.raysPerRing", -9999)
+  if raysPerRing == -9999
+    JsonUtil.SetPathIntValue(CFG_PATH, "weather.cold.snowDetection.raysPerRing", 12)
+  endif
+
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.snowDetection.threshold", -9999.0)
+  if f == -9999.0
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.snowDetection.threshold", 50.0)
+  endif
+
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.windDetection.minRange", -9999.0)
+  if f == -9999.0
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.windDetection.minRange", 35.0)
+  endif
+
+  ; cold.enable
+  Int i = JsonUtil.GetPathIntValue(CFG_PATH, "weather.cold.enable", -9999)
+  if i == -9999
+    JsonUtil.SetPathIntValue(CFG_PATH, "weather.cold.enable", 1)
+  endif
+
+  ; cold.tick (hp bleed scale)
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.tick", -9999.0)
+  if f == -9999.0
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.tick", 0.0)
+  endif
+
+  ; debug toggles
+  i = JsonUtil.GetPathIntValue(CFG_PATH, "debug.enable", -9999)
+  if i == -9999
+    JsonUtil.SetPathIntValue(CFG_PATH, "debug.enable", 0)
+  endif
+  i = JsonUtil.GetPathIntValue(CFG_PATH, "debug.trace", -9999)
+  if i == -9999
+    JsonUtil.SetPathIntValue(CFG_PATH, "debug.trace", 0)
+  endif
+
+  JsonUtil.Save(CFG_PATH)
+EndFunction
+
+Event OnQuickTick(String speedStr, Float regenMult)
+  if bTraceLogs
+    Debug.Trace("[SS] QuickTick request received -> scheduling fast tick")
+  endif
+  RegisterForSingleUpdateGameTime(kFastTickH)
+EndEvent
+
+Function ApplyDebugFlags()
+  bDebugEnabled = GetB("debug.enable", False)
+  bTraceLogs    = GetB("debug.trace", False)
+  if bTraceLogs
+    Debug.Trace("[SS] Controller init: debug=" + bDebugEnabled + " trace=1")
+  endif
+
+EndFunction

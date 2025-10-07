@@ -1,0 +1,73 @@
+{
+  "Systems": {
+    "Cold": true,
+    "Hunger": true,
+    "Spoiling": true,
+    "Fatigue": true
+  },
+"Tick": { "Hours": 0.08 },
+
+"weather": {
+  "cold": {
+    "enable": 1,
+    "baseRequirement": 200.0,
+    "environmentSnowBonus": 150.0,
+    "sunPenalty": 0.0,
+    "nightPenalty": 100.0,
+    "rainPenalty": 60.0,
+    "snowPenalty": 140.0,
+    "windPenalty": 40.0,
+    "swimPenalty": 90.0,
+    "snowDetection": {
+      "radius": 160.0,
+      "raysPerRing": 12,
+      "threshold": 50.0
+    },
+    "windDetection": {
+      "minRange": 35.0
+    }
+  }
+},
+
+"Cold": {
+    "SafeWarmth": 400,
+    "SnowBase": 300,
+    "BlizzardBonus": 150,
+    "AltStartZ": 38000,
+    "AltPer1000Z": 15,
+    "WetRainGain": 10,
+    "WetSwimGain": 40,
+    "WetDryNearFire": 25,
+    "ShelterReduction": 180,
+    "RegenPenaltyAtDef100": 0.35,
+    "SpeedPenaltyPctAtDef100": 5.0,
+    "BleedStartDeficit": 120,
+    "BleedHpPerTickAtDef200": 2.0
+  },
+
+  "Hunger": {
+    "Enabled": true,
+    "GraceHours": 3,
+    "RatePerDay": 30,
+    "RegenPenaltyAt100": 0.35,
+    "MaxStatLossPctAt100": 15,
+    "StarveBleed": true
+  },
+
+  "Food": {
+    "Spoiling": true,
+    "RawHours": 24,
+    "CookedHours": 96,
+    "UseStale": true
+  },
+
+  "Rest": {
+    "Enabled": true,
+    "GraceHours": 3,
+    "RatePerDay": 25,
+    "MaxStatLossPctAt100": 20,
+    "LimitBedroll5h": true,
+    "LimitWilderness5h": true,
+    "InnBonus": true
+  }
+}
