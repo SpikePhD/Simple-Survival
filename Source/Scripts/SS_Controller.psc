@@ -50,87 +50,10 @@ Float kBaseWarmthHead  = 25.0
 Float kBaseWarmthHands = 25.0
 Float kBaseWarmthFeet  = 25.0
 
-String[] kWarmthKeywordNames
-Float[]  kWarmthKeywordBonuses
-Bool     bWarmthKeywordsReady = False
-
-Function InitWarmthKeywords()
-  Int keywordCount = 24
-
-  if kWarmthKeywordNames == None || kWarmthKeywordNames.Length != keywordCount
-    kWarmthKeywordNames = Utility.CreateStringArray(keywordCount)
-    bWarmthKeywordsReady = False
-  endif
-
-  if kWarmthKeywordBonuses == None || kWarmthKeywordBonuses.Length != keywordCount
-    kWarmthKeywordBonuses = Utility.CreateFloatArray(keywordCount)
-    bWarmthKeywordsReady = False
-  endif
-
-  if bWarmthKeywordsReady
-    return
-  endif
-
-  if kWarmthKeywordNames != None && kWarmthKeywordBonuses != None
-    kWarmthKeywordNames[0] = "leather"
-    kWarmthKeywordBonuses[0] = 50.0
-    kWarmthKeywordNames[1] = "hide"
-    kWarmthKeywordBonuses[1] = 50.0
-    kWarmthKeywordNames[2] = "fur"
-    kWarmthKeywordBonuses[2] = 40.0
-    kWarmthKeywordNames[3] = "pelt"
-    kWarmthKeywordBonuses[3] = 40.0
-    kWarmthKeywordNames[4] = "bear"
-    kWarmthKeywordBonuses[4] = 55.0
-    kWarmthKeywordNames[5] = "wolf"
-    kWarmthKeywordBonuses[5] = 45.0
-    kWarmthKeywordNames[6] = "stormcloak"
-    kWarmthKeywordBonuses[6] = 55.0
-    kWarmthKeywordNames[7] = "imperial"
-    kWarmthKeywordBonuses[7] = 35.0
-    kWarmthKeywordNames[8] = "studded"
-    kWarmthKeywordBonuses[8] = 30.0
-    kWarmthKeywordNames[9] = "scaled"
-    kWarmthKeywordBonuses[9] = 35.0
-    kWarmthKeywordNames[10] = "guard"
-    kWarmthKeywordBonuses[10] = 30.0
-    kWarmthKeywordNames[11] = "daedric"
-    kWarmthKeywordBonuses[11] = 70.0
-    kWarmthKeywordNames[12] = "dragonplate"
-    kWarmthKeywordBonuses[12] = 70.0
-    kWarmthKeywordNames[13] = "dragonscale"
-    kWarmthKeywordBonuses[13] = 65.0
-    kWarmthKeywordNames[14] = "stalhrim"
-    kWarmthKeywordBonuses[14] = 65.0
-    kWarmthKeywordNames[15] = "ebony"
-    kWarmthKeywordBonuses[15] = 60.0
-    kWarmthKeywordNames[16] = "orcish"
-    kWarmthKeywordBonuses[16] = 45.0
-    kWarmthKeywordNames[17] = "dwarven"
-    kWarmthKeywordBonuses[17] = 40.0
-    kWarmthKeywordNames[18] = "iron"
-    kWarmthKeywordBonuses[18] = 15.0
-    kWarmthKeywordNames[19] = "steel"
-    kWarmthKeywordBonuses[19] = 20.0
-    kWarmthKeywordNames[20] = "elven"
-    kWarmthKeywordBonuses[20] = 35.0
-    kWarmthKeywordNames[21] = "glass"
-    kWarmthKeywordBonuses[21] = 45.0
-    kWarmthKeywordNames[22] = "chitin"
-    kWarmthKeywordBonuses[22] = 35.0
-    kWarmthKeywordNames[23] = "bonemold"
-    kWarmthKeywordBonuses[23] = 40.0
-
-    bWarmthKeywordsReady = True
-  endif
-
-EndFunction
-
 ; =======================
 ; Lifecycle
 ; =======================
 Event OnInit()
-  InitWarmthKeywords()
   InitConfigDefaults()
   ApplyDebugFlags()
   EnsurePlayerHasAbility()
@@ -243,9 +166,7 @@ Event OnUpdateGameTime()
       p.DamageActorValue("Health", coldTick * scale)
     endif
 
-    if coldOn && deficit > 0.0
-      ApplyColdResourceDrain(p)
-    endif
+    ; Cold resource drain disabled for linear penalty testing
   else
     int h2 = ModEvent.Create("SS_ClearCold")
     if h2
@@ -579,7 +500,6 @@ Float Function GetLastWarmth()
 EndFunction
 
 Float Function GetPlayerWarmthScoreV1(Actor p, Float perPiece)
-  InitWarmthKeywords()
   if p == None
     return 0.0
   endif
@@ -632,23 +552,93 @@ Float Function ComputePieceWarmth(Actor wearer, Int slotMask, Float baseWarmth, 
   String rawName = a.GetName()
   if rawName != ""
     String lowerName = NormalizeWarmthName(rawName)
-    Int i = 0
-    while i < kWarmthKeywordNames.Length
-      String keywordName = kWarmthKeywordNames[i]
-      if keywordName != ""
-        if StringUtil.Find(lowerName, keywordName) >= 0
-          Float bonus = 0.0
-          if i < kWarmthKeywordBonuses.Length
-            bonus = kWarmthKeywordBonuses[i]
-          endif
-          warmth += bonus
-        endif
-      endif
-      i += 1
-    endwhile
+    warmth += GetWarmthBonusFromName(lowerName)
   endif
 
   return warmth
+EndFunction
+
+Float Function GetWarmthBonusFromName(String lowerName)
+  if lowerName == ""
+    return 0.0
+  endif
+
+  Float bonus = 0.0
+
+  if StringUtil.Find(lowerName, "leather") >= 0
+    bonus += 50.0
+  endif
+  if StringUtil.Find(lowerName, "hide") >= 0
+    bonus += 50.0
+  endif
+  if StringUtil.Find(lowerName, "fur") >= 0
+    bonus += 40.0
+  endif
+  if StringUtil.Find(lowerName, "pelt") >= 0
+    bonus += 40.0
+  endif
+  if StringUtil.Find(lowerName, "bear") >= 0
+    bonus += 55.0
+  endif
+  if StringUtil.Find(lowerName, "wolf") >= 0
+    bonus += 45.0
+  endif
+  if StringUtil.Find(lowerName, "stormcloak") >= 0
+    bonus += 55.0
+  endif
+  if StringUtil.Find(lowerName, "imperial") >= 0
+    bonus += 35.0
+  endif
+  if StringUtil.Find(lowerName, "studded") >= 0
+    bonus += 30.0
+  endif
+  if StringUtil.Find(lowerName, "scaled") >= 0
+    bonus += 35.0
+  endif
+  if StringUtil.Find(lowerName, "guard") >= 0
+    bonus += 30.0
+  endif
+  if StringUtil.Find(lowerName, "daedric") >= 0
+    bonus += 70.0
+  endif
+  if StringUtil.Find(lowerName, "dragonplate") >= 0
+    bonus += 70.0
+  endif
+  if StringUtil.Find(lowerName, "dragonscale") >= 0
+    bonus += 65.0
+  endif
+  if StringUtil.Find(lowerName, "stalhrim") >= 0
+    bonus += 65.0
+  endif
+  if StringUtil.Find(lowerName, "ebony") >= 0
+    bonus += 60.0
+  endif
+  if StringUtil.Find(lowerName, "orcish") >= 0
+    bonus += 45.0
+  endif
+  if StringUtil.Find(lowerName, "dwarven") >= 0
+    bonus += 40.0
+  endif
+  if StringUtil.Find(lowerName, "iron") >= 0
+    bonus += 15.0
+  endif
+  if StringUtil.Find(lowerName, "steel") >= 0
+    bonus += 20.0
+  endif
+  if StringUtil.Find(lowerName, "elven") >= 0
+    bonus += 35.0
+  endif
+  if StringUtil.Find(lowerName, "glass") >= 0
+    bonus += 45.0
+  endif
+  if StringUtil.Find(lowerName, "chitin") >= 0
+    bonus += 35.0
+  endif
+  if StringUtil.Find(lowerName, "bonemold") >= 0
+    bonus += 40.0
+  endif
+
+  return bonus
 EndFunction
 
 String Function NormalizeWarmthName(String rawName)

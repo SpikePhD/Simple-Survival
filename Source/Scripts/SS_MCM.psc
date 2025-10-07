@@ -383,8 +383,10 @@ Function UpdateWarmthCache()
       if controllerBase > 0.0 || baseReq <= 0.0
         baseReq = controllerBase
       endif
-      safeReq = controller.GetLastSafeRequirement()
-      if safeReq <= 0.0
+      Float controllerSafe = controller.GetLastSafeRequirement()
+      if controllerSafe > 0.0
+        safeReq = controllerSafe
+      else
         safeReq = baseReq + modifiers
       endif
       if modifiers == 0.0
