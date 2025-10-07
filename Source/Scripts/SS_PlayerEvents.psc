@@ -5,19 +5,19 @@ Quest Property ControllerQuest Auto
 Float sleepStartGameTime = 0.0
 
 Event OnInit()
-  SS_Controller controller = ResolveController()
-  if controller != None
-    Debug.Trace("[SS] PlayerEvents: Init -> refresh")
-    controller.RequestRefresh()
-  endif
+  TriggerEnvironmentRefresh("Init")
 EndEvent
 
 Event OnLocationChange(Location akOldLoc, Location akNewLoc)
-  SS_Controller controller = ResolveController()
-  if controller != None
-    Debug.Trace("[SS] PlayerEvents: Location change -> refresh")
-    controller.RequestRefresh()
-  endif
+  TriggerEnvironmentRefresh("LocationChange")
+EndEvent
+
+Event OnCellAttach()
+  TriggerEnvironmentRefresh("CellAttach")
+EndEvent
+
+Event OnCellDetach()
+  TriggerEnvironmentRefresh("CellDetach")
 EndEvent
 
 Event OnSleepStart(Float afSleepStartTime, Float afDesiredWakeTime)
@@ -41,9 +41,12 @@ Event OnSleepStop(Bool abInterrupted)
   endif
 EndEvent
 
-Function TriggerEnvironmentRefresh()
+Function TriggerEnvironmentRefresh(String source = "")
   SS_Controller controller = ResolveController()
   if controller != None
+    if source != ""
+      Debug.Trace("[SS] PlayerEvents: " + source + " -> refresh")
+    endif
     controller.RequestRefresh()
   endif
 EndFunction
