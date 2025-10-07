@@ -49,6 +49,7 @@ Float kBaseWarmthBody  = 50.0
 Float kBaseWarmthHead  = 25.0
 Float kBaseWarmthHands = 25.0
 Float kBaseWarmthFeet  = 25.0
+Float kBaseWarmthCloak = 30.0
 
 ; =======================
 ; Lifecycle
@@ -509,6 +510,7 @@ Float Function GetPlayerWarmthScoreV1(Actor p, Float perPiece)
   total += ComputePieceWarmth(p, 0x00000001, kBaseWarmthHead, GetHeadGear(p))
   total += ComputePieceWarmth(p, 0x00000008, kBaseWarmthHands)
   total += ComputePieceWarmth(p, 0x00000080, kBaseWarmthFeet)
+  total += ComputePieceWarmth(p, 0x00010000, kBaseWarmthCloak)
 
   if perPiece > 0.0 && perPiece != 100.0
     total *= (perPiece / 100.0)
@@ -564,6 +566,7 @@ Float Function GetWarmthBonusFromName(String lowerName)
   endif
 
   Float bonus = 0.0
+  Bool  hasStormcloak = False
 
   if StringUtil.Find(lowerName, "leather") >= 0
     bonus += 50.0
@@ -585,6 +588,7 @@ Float Function GetWarmthBonusFromName(String lowerName)
   endif
   if StringUtil.Find(lowerName, "stormcloak") >= 0
     bonus += 55.0
+    hasStormcloak = True
   endif
   if StringUtil.Find(lowerName, "imperial") >= 0
     bonus += 35.0
@@ -636,6 +640,23 @@ Float Function GetWarmthBonusFromName(String lowerName)
   endif
   if StringUtil.Find(lowerName, "bonemold") >= 0
     bonus += 40.0
+  endif
+  if !hasStormcloak
+    if StringUtil.Find(lowerName, "cloak") >= 0
+      bonus += 35.0
+    endif
+  endif
+  if StringUtil.Find(lowerName, "cape") >= 0
+    bonus += 30.0
+  endif
+  if StringUtil.Find(lowerName, "shawl") >= 0
+    bonus += 25.0
+  endif
+  if StringUtil.Find(lowerName, "wrap") >= 0
+    bonus += 20.0
+  endif
+  if StringUtil.Find(lowerName, "mantle") >= 0
+    bonus += 20.0
   endif
 
   return bonus
