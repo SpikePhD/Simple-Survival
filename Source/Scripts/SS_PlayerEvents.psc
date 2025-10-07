@@ -1,11 +1,13 @@
 Scriptname SS_PlayerEvents extends ReferenceAlias
 
+Import PO3_Events_Alias
+
 Quest Property ControllerQuest Auto
 Float sleepStartGameTime = 0.0
 
 Event OnInit()
-  PO3_Events_Alias.RegisterForWeatherChange(Self)
-  PO3_Events_Alias.RegisterForOnPlayerFastTravelEnd(Self)
+  RegisterForWeatherChange(Self)
+  RegisterForOnPlayerFastTravelEnd(Self)
   TriggerEnvironmentRefresh("Init")
 EndEvent
 

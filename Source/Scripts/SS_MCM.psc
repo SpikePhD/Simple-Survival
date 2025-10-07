@@ -512,3 +512,13 @@ Function SetF(String path, Float v)
   JsonUtil.SetPathFloatValue(CFG_PATH, path, v)
   JsonUtil.Save(CFG_PATH)
 EndFunction
+
+Function RequestControllerRefresh()
+  If SS_CoreQuest != None
+    SS_Controller controller = SS_CoreQuest as SS_Controller
+    If controller != None
+      controller.RequestRefresh()
+    EndIf
+  EndIf
+EndFunction
+
