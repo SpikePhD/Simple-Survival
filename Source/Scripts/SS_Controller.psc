@@ -21,6 +21,9 @@ Float Property LastWarmth Auto
 Float Property LastSafeRequirement Auto
 Float Property LastWeatherBonus Auto
 Float Property LastBaseRequirement Auto
+Int   lastRegionBucket = -99
+Int   lastWeatherClass = -99
+Float lastToastTime = 0.0
 
 ; --- Debug ---
 Bool  bDebugEnabled = False
@@ -135,6 +138,7 @@ Event OnInit()
   endif
   ; instant reactions on gear changes
   RegisterForModEvent("SS_QuickTick", "OnQuickTick")
+  lastToastTime = Utility.GetCurrentRealTime() - GetToastGapSeconds()
 EndEvent
 
 Event OnUpdateGameTime()
@@ -159,7 +163,9 @@ Event OnUpdateGameTime()
   ; ---- read config ----
   Bool  coldOn    = GetB("weather.cold.enable", True)
   Float baseRequirement = ReadBaseRequirement()
-  Float safeReq     = ComputeWarmthRequirement(p, baseRequirement)
+  Int regionClass = GetRegionClassification()
+  Int weatherClass = GetWeatherClassification()
+  Float safeReq     = ComputeWarmthRequirement(p, baseRequirement, regionClass, weatherClass)
   Float modifierSum = safeReq - baseRequirement
   Float autoPer   = GetF("weather.cold.autoWarmthPerPiece", 100.0)
   Float coldTick  = GetF("weather.cold.tick", 0.0) ; optional hp bleed per tick at max deficit
@@ -167,6 +173,7 @@ Event OnUpdateGameTime()
   LastBaseRequirement = baseRequirement
   LastSafeRequirement = safeReq
   LastWeatherBonus    = modifierSum
+  MaybeNotifyWeatherChanges(regionClass, weatherClass)
 
   ; ---- warmth/deficit from gear ----
   Float warmth = GetPlayerWarmthScoreV1(p, autoPer)
@@ -331,13 +338,11 @@ EndFunction
 ; Warmth demand helpers
 ; =====================
 
-Float Function ComputeWarmthRequirement(Actor p, Float baseRequirement)
+Float Function ComputeWarmthRequirement(Actor p, Float baseRequirement, Int regionClass, Int weatherClass)
   Float requirement = baseRequirement
 
-  Int regionClass = GetRegionClassification()
   requirement += GetRegionContribution(regionClass)
 
-  Int weatherClass = GetWeatherClassification()
   requirement += GetWeatherContribution(weatherClass)
 
   Float exteriorAdjust = GetF("weather.cold.exteriorAdjust", 0.0)
@@ -371,7 +376,7 @@ Int Function GetRegionClassification()
     idx -= 1
   endwhile
 
-  return 0
+  return -1
 EndFunction
 
 Int Function GetWeatherClassification()
@@ -406,6 +411,71 @@ Float Function GetWeatherContribution(Int classification)
     return GetF("weather.cold.weather.snowy", 0.0)
   endif
   return 0.0
+EndFunction
+
+Function MaybeNotifyWeatherChanges(Int regionClass, Int weatherClass)
+  Float gap = GetToastGapSeconds()
+  if gap < 0.0
+    gap = 0.0
+  endif
+
+  Float now = Utility.GetCurrentRealTime()
+
+  if regionClass != lastRegionBucket
+    String regionMsg = GetRegionToastMessage(regionClass)
+    if regionMsg != "" && (now - lastToastTime) >= gap
+      Debug.Notification(regionMsg)
+      if bTraceLogs
+        Debug.Trace("[SS] Toast: " + regionMsg)
+      endif
+      lastRegionBucket = regionClass
+      lastToastTime = Utility.GetCurrentRealTime()
+      now = lastToastTime
+    endif
+  endif
+
+  if weatherClass != lastWeatherClass
+    String weatherMsg = GetWeatherToastMessage(weatherClass)
+    Float current = Utility.GetCurrentRealTime()
+    if weatherMsg != "" && (current - lastToastTime) >= gap
+      Debug.Notification(weatherMsg)
+      if bTraceLogs
+        Debug.Trace("[SS] Toast: " + weatherMsg)
+      endif
+      lastWeatherClass = weatherClass
+      lastToastTime = Utility.GetCurrentRealTime()
+    endif
+  endif
+EndFunction
+
+Float Function GetToastGapSeconds()
+  return GetF("weather.cold.toastMinGapSeconds", 5.0)
+EndFunction
+
+String Function GetRegionToastMessage(Int classification)
+  if classification == 0
+    return "Warm Region: The weather here is generally mild and pleasant."
+  elseif classification == 1
+    return "Cloudy Region: Skies here are often overcast."
+  elseif classification == 2
+    return "Rainy Region: The weather here is usually wet and rainy."
+  elseif classification == 3
+    return "Snowy Region: The weather here is normally snowy."
+  endif
+  return "Unknown Region: Climate data unavailable."
+EndFunction
+
+String Function GetWeatherToastMessage(Int classification)
+  if classification == 0
+    return "Pleasant weather: Clear and fair."
+  elseif classification == 1
+    return "Cloudy weather: Clouds gather above."
+  elseif classification == 2
+    return "Rainy weather: Rain is falling."
+  elseif classification == 3
+    return "Snowy weather: It's snowing!"
+  endif
+  return "Weather changed: (unclassified)"
 EndFunction
 
 Float Function GetNightMultiplier()
@@ -644,6 +714,11 @@ Function InitConfigDefaults()
   f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.nightMultiplier", -9999.0)
   if f == -9999.0
     JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.nightMultiplier", 1.25)
+  endif
+
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.toastMinGapSeconds", -9999.0)
+  if f == -9999.0
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.toastMinGapSeconds", 5.0)
   endif
 
   ; cold.enable

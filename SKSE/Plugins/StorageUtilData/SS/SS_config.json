@@ -25,7 +25,8 @@
     },
     "exteriorAdjust": 50.0,
     "interiorAdjust": -50.0,
-    "nightMultiplier": 1.25
+    "nightMultiplier": 1.25,
+    "toastMinGapSeconds": 5.0
   }
 },
 

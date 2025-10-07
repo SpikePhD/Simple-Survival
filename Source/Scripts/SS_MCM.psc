@@ -25,6 +25,7 @@ Int _optWeatherSnowy
 Int _optEnvironmentHeader
 Int _optExteriorAdjust
 Int _optInteriorAdjust
+Int _optToastCooldown
 Int _optNightMultiplier
 Int _optWarmthReadout
 
@@ -89,6 +90,7 @@ Event OnPageReset(String a_page)
     _optEnvironmentHeader = AddHeaderOption("Environment modifiers")
     _optExteriorAdjust    = AddSliderOption("Exterior adjustment", GetF("weather.cold.exteriorAdjust"), "{0}")
     _optInteriorAdjust    = AddSliderOption("Interior adjustment", GetF("weather.cold.interiorAdjust"), "{0}")
+    _optToastCooldown     = AddSliderOption("Toast cooldown (seconds)", GetF("weather.cold.toastMinGapSeconds"), "{0}")
     _optNightMultiplier   = AddSliderOption("Night multiplier", GetF("weather.cold.nightMultiplier"), "{2}")
 
     _optWarmthReadout = AddTextOption("Current warmth / req:", _currentWarmthDisplay)
@@ -216,6 +218,11 @@ Event OnOptionSliderOpen(Int a_option)
     SetSliderDialogRange(-500.0, 500.0)
     SetSliderDialogInterval(10.0)
 
+  ElseIf a_option == _optToastCooldown
+    SetSliderDialogStartValue(GetF("weather.cold.toastMinGapSeconds"))
+    SetSliderDialogRange(0.0, 30.0)
+    SetSliderDialogInterval(1.0)
+
   ElseIf a_option == _optNightMultiplier
     SetSliderDialogStartValue(GetF("weather.cold.nightMultiplier"))
     SetSliderDialogRange(1.0, 2.0)
@@ -308,6 +315,10 @@ Event OnOptionSliderAccept(Int a_option, Float a_value)
     SetF("weather.cold.interiorAdjust", a_value)
     SetSliderOptionValue(a_option, a_value, "{0}")
     RefreshWarmthReadout()
+
+  ElseIf a_option == _optToastCooldown
+    SetF("weather.cold.toastMinGapSeconds", a_value)
+    SetSliderOptionValue(a_option, a_value, "{0}")
 
   ElseIf a_option == _optNightMultiplier
     SetF("weather.cold.nightMultiplier", a_value)
