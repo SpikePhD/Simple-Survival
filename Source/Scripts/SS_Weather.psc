@@ -41,8 +41,6 @@ Float kSlowTickH    = 0.40       ; 24 in-game minutes
 Float kColdDrainFrac = 0.05
 Float kColdFloorFrac = 0.20
 
-; --- Swim change nudge ---
-Bool wasSwimming = False
 
 ; --- Warmth scoring constants ---
 Float kBaseWarmthBody  = 50.0
@@ -60,7 +58,7 @@ Function ConfigureModule(Spell ability)
 EndFunction
 
 Function RequestFastTick()
-  RegisterForSingleUpdateGameTime(kFastTickH)
+  EvaluateWeather("RequestFastTick")
 EndFunction
 
 ; =======================
@@ -71,14 +69,10 @@ Event OnInit()
   ApplyDebugFlags()
   EnsurePlayerHasAbility()
   bRunning = True
-  ; schedule first tick quickly so player feels it
-  RegisterForSingleUpdateGameTime(kFastTickH)
-  if bTraceLogs
-    Debug.Trace("[SS] Controller OnInit: ability ensured, first tick scheduled fast")
-  endif
   ; instant reactions on gear changes
   RegisterForModEvent("SS_QuickTick", "OnQuickTick")
   lastToastTime = Utility.GetCurrentRealTime() - GetToastGapSeconds()
+  EvaluateWeather("Init")
 EndEvent
 
 Event OnPlayerLoadGame()
@@ -86,13 +80,10 @@ Event OnPlayerLoadGame()
   ApplyDebugFlags()
   EnsurePlayerHasAbility()
   bRunning = True
-  RegisterForSingleUpdateGameTime(kFastTickH)
-  if bTraceLogs
-    Debug.Trace("[SS] Controller OnPlayerLoadGame: state refreshed, fast tick scheduled")
-  endif
+  EvaluateWeather("OnPlayerLoadGame")
 EndEvent
 
-Event OnUpdateGameTime()
+Function EvaluateWeather(String source = "Tick")
   if !bRunning
     return
   endif
@@ -107,12 +98,11 @@ Event OnUpdateGameTime()
     LastStaminaPenalty = 0
     LastMagickaPenalty = 0
     LastSpeedPenalty   = 0
-    RegisterForSingleUpdateGameTime(kNormalTickH)
     return
   endif
 
   if bTraceLogs
-    Debug.Trace("[SS] Tick start")
+    Debug.Trace("[SS] EvaluateWeather (" + source + ")")
   endif
 
   ; ---- read config ----
@@ -208,20 +198,7 @@ Event OnUpdateGameTime()
     LastSpeedPenalty   = 0
   endif
 
-  ; ---- adaptive cadence decision for next tick ----
-  Float next = kNormalTickH
-  if !p.IsInInterior()
-    if deficit > 0.0
-      next = kFastTickH
-    else
-      next = kNormalTickH
-    endif
-  else
-    next = kSlowTickH
-  endif
-
-  RegisterForSingleUpdateGameTime(next)
-EndEvent
+EndFunction
 
 Function ApplyColdResourceDrain(Actor p)
   if p == None || p.IsDead() || !p.Is3DLoaded()
@@ -267,19 +244,6 @@ EndFunction
 ; =======================
 ; Instant wake-ups (equip/swim)
 ; =======================
-
-; Call at the start of UpdateCold-like logic if you later add weather/wetness.
-; For the lean v2 (gear-only), we still react to swim transitions for snappiness.
-Function NudgeOnSwimChange(Actor p)
-  Bool nowSwimming = p.IsSwimming()
-  if nowSwimming != wasSwimming
-    RegisterForSingleUpdateGameTime(kFastTickH)
-    if bTraceLogs
-      Debug.Trace("[SS] Swim state changed -> quick tick")
-    endif
-  endif
-  wasSwimming = nowSwimming
-EndFunction
 
 ; =======================
 ; Ability ensure
@@ -837,9 +801,9 @@ EndFunction
 
 Event OnQuickTick(String speedStr, Float regenMult)
   if bTraceLogs
-    Debug.Trace("[SS] QuickTick request received -> scheduling fast tick")
+    Debug.Trace("[SS] QuickTick request received -> evaluate")
   endif
-  RegisterForSingleUpdateGameTime(kFastTickH)
+  EvaluateWeather("QuickTick")
 EndEvent
 
 Function ApplyDebugFlags()
@@ -850,3 +814,4 @@ Function ApplyDebugFlags()
   endif
 
 EndFunction
+

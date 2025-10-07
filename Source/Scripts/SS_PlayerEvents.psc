@@ -1,10 +1,11 @@
 Scriptname SS_PlayerEvents extends ReferenceAlias
 
 Quest Property ControllerQuest Auto
-
 Float sleepStartGameTime = 0.0
 
 Event OnInit()
+  PO3_Events_Alias.RegisterForWeatherChange(Self)
+  PO3_Events_Alias.RegisterForOnPlayerFastTravelEnd(Self)
   TriggerEnvironmentRefresh("Init")
 EndEvent
 
@@ -39,6 +40,14 @@ Event OnSleepStop(Bool abInterrupted)
     Debug.Trace("[SS] PlayerEvents: Sleep ended (" + hoursSlept + "h) -> refresh")
     controller.NotifySleepComplete(hoursSlept)
   endif
+EndEvent
+
+Event OnWeatherChange(Weather akOldWeather, Weather akNewWeather)
+  TriggerEnvironmentRefresh("WeatherChange")
+EndEvent
+
+Event OnPlayerFastTravelEnd(Float afTravelGameTimeHours)
+  TriggerEnvironmentRefresh("FastTravelEnd")
 EndEvent
 
 Function TriggerEnvironmentRefresh(String source = "")
