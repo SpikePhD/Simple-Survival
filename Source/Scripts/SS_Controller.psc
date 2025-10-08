@@ -129,13 +129,19 @@ Function ApplyDebugFlags()
   endif
 EndFunction
 
-Function RequestRefresh()
+Function RequestRefresh(String source = "RequestRefresh")
   if WeatherModule != None
-    WeatherModule.RequestFastTick()
+    WeatherModule.RequestFastTick(source)
+  endif
+EndFunction
+
+Function NotifyFastTravelOrigin()
+  if WeatherModule != None
+    WeatherModule.RecordFastTravelOrigin()
   endif
 EndFunction
 
 Function NotifySleepComplete(Float hoursSlept)
   ; placeholder for future hunger/fatigue integration
-  RequestRefresh()
+  RequestRefresh("SleepComplete")
 EndFunction

@@ -49,16 +49,23 @@ Event OnWeatherChange(Weather akOldWeather, Weather akNewWeather)
 EndEvent
 
 Event OnPlayerFastTravelEnd(Float afTravelGameTimeHours)
-  TriggerEnvironmentRefresh("FastTravelEnd")
+  SS_Controller controller = ResolveController()
+  if controller != None
+    controller.NotifyFastTravelOrigin()
+  endif
+  TriggerEnvironmentRefresh("FastTravelEnd", controller)
 EndEvent
 
-Function TriggerEnvironmentRefresh(String source = "")
-  SS_Controller controller = ResolveController()
+Function TriggerEnvironmentRefresh(String source = "", SS_Controller cachedController = None)
+  SS_Controller controller = cachedController
+  if controller == None
+    controller = ResolveController()
+  endif
   if controller != None
     if source != ""
       Debug.Trace("[SS] PlayerEvents: " + source + " -> refresh")
     endif
-    controller.RequestRefresh()
+    controller.RequestRefresh(source)
   endif
 EndFunction
 

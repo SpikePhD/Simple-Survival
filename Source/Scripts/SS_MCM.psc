@@ -29,6 +29,8 @@ Int _optToastCooldown
 Int _optNightMultiplier
 Int _optWarmthReadout
 Int _optPenaltyReadout
+Int _optUIHeader
+Int _optToastsEnable
 
 ; Food & Hunger
 Int _optFoodHeader
@@ -96,6 +98,9 @@ Event OnPageReset(String a_page)
     _optToastCooldown     = AddSliderOption("Toast cooldown (seconds)", GetF("weather.cold.toastMinGapSeconds"), "{0}")
     _optNightMultiplier   = AddSliderOption("Night multiplier", GetF("weather.cold.nightMultiplier"), "{2}")
 
+    _optUIHeader = AddHeaderOption("UI Feedback")
+    _optToastsEnable = AddToggleOption("Show toast notifications", GetB("ui.toasts.enable"))
+
     _optWarmthReadout = AddTextOption("Current warmth / req:", _currentWarmthDisplay)
     _optPenaltyReadout = AddTextOption("Actual penalties applied", _currentPenaltyDisplay)
 
@@ -153,6 +158,11 @@ Event OnOptionSelect(Int a_option)
     Bool v5 = !GetB("debug.trace")
     SetB("debug.trace", v5)
     SetToggleOptionValue(a_option, v5)
+
+  ElseIf a_option == _optToastsEnable
+    Bool v6 = !GetB("ui.toasts.enable")
+    SetB("ui.toasts.enable", v6)
+    SetToggleOptionValue(a_option, v6)
 
   ElseIf a_option == _optDebugPing
     Int h = ModEvent.Create("SS_SetCold")
@@ -539,11 +549,11 @@ Function SetF(String path, Float v)
   JsonUtil.Save(CFG_PATH)
 EndFunction
 
-Function RequestControllerRefresh()
+Function RequestControllerRefresh(String reason = "MCM")
   If SS_CoreQuest != None
     SS_Controller controller = SS_CoreQuest as SS_Controller
     If controller != None
-      controller.RequestRefresh()
+      controller.RequestRefresh(reason)
     EndIf
   EndIf
 EndFunction

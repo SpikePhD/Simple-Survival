@@ -46,6 +46,19 @@ Bool  bRefreshQueued = False
 String queuedSource = ""
 Float lastEvaluateRealTime = 0.0
 
+Location lastKnownLocation
+String   lastLocationName = ""
+WorldSpace lastWorldspace
+String     lastWorldspaceName = ""
+Bool     lastInteriorState = False
+Weather  lastWeatherForm
+
+String pendingFastTravelOriginLocation = ""
+String pendingFastTravelOriginWorldspace = ""
+Bool   pendingFastTravelOriginInterior = False
+
+Int    lastExposureTier = -1
+
 
 ; --- Warmth scoring constants ---
 Float kBaseWarmthBody  = 50.0
@@ -67,6 +80,10 @@ Function RequestFastTick(String source = "RequestFastTick")
 EndFunction
 
 Function RequestEvaluate(String source, Bool forceImmediate = False)
+  if source == ""
+    source = "RequestFastTick"
+  endif
+
   if forceImmediate
     if bRefreshQueued
       bRefreshQueued = False
@@ -90,7 +107,9 @@ Function RequestEvaluate(String source, Bool forceImmediate = False)
   endif
 
   if queuedSource != ""
-    queuedSource = queuedSource + "|" + source
+    if !SourceIncludes(queuedSource, source)
+      queuedSource = queuedSource + "|" + source
+    endif
   else
     queuedSource = source
   endif
@@ -103,6 +122,12 @@ Function RequestEvaluate(String source, Bool forceImmediate = False)
     endif
     RegisterForSingleUpdate(delay)
   endif
+EndFunction
+
+Function RecordFastTravelOrigin()
+  pendingFastTravelOriginLocation = lastLocationName
+  pendingFastTravelOriginWorldspace = lastWorldspaceName
+  pendingFastTravelOriginInterior = lastInteriorState
 EndFunction
 
 ; =======================
@@ -146,9 +171,25 @@ Function EvaluateWeather(String source = "Tick")
     return
   endif
 
+  Location oldLocation = lastKnownLocation
+  String oldLocationName = lastLocationName
+  String oldWorldspaceName = lastWorldspaceName
+  Bool oldInterior = lastInteriorState
+  Weather previousWeather = lastWeatherForm
+  Int previousExposureTier = lastExposureTier
+
+  Location currentLocation = p.GetCurrentLocation()
+  WorldSpace currentWorldspace = p.GetWorldSpace()
+  Bool isInterior = p.IsInInterior()
+  String newLocationName = ResolveLocationName(currentLocation)
+  String newWorldspaceName = ResolveWorldspaceName(currentWorldspace)
+  Weather currentWeather = Weather.GetCurrentWeather()
+
   if bTraceLogs
     Debug.Trace("[SS] EvaluateWeather (" + source + ")")
   endif
+
+  Bool toastsEnabled = AreToastsEnabled()
 
   ; ---- read config ----
   Bool  coldOn    = GetB("weather.cold.enable", True)
@@ -163,7 +204,8 @@ Function EvaluateWeather(String source = "Tick")
   LastBaseRequirement = baseRequirement
   LastSafeRequirement = safeReq
   LastWeatherBonus    = modifierSum
-  MaybeNotifyWeatherChanges(regionClass, weatherClass)
+  Int changeFlags = MaybeNotifyWeatherChanges(regionClass, weatherClass, previousWeather, currentWeather)
+  Bool weatherChanged = (changeFlags >= 2)
 
   ; ---- warmth/deficit from gear ----
   Float warmth = GetPlayerWarmthScoreV1(p, autoPer)
@@ -189,6 +231,7 @@ Function EvaluateWeather(String source = "Tick")
   LastStaminaPenalty = staminaPenaltyPct
   LastMagickaPenalty = magickaPenaltyPct
   LastSpeedPenalty   = speedPenaltyPct
+  Int newExposureTier = ComputeExposureTier(deficit, safeReq)
 
   ; ---- penalties mapping ----
   ; ---- apply or clear via driver ----
@@ -241,7 +284,58 @@ Function EvaluateWeather(String source = "Tick")
     LastStaminaPenalty = 0
     LastMagickaPenalty = 0
     LastSpeedPenalty   = 0
+    newExposureTier = 0
   endif
+
+  Bool sourceIsFastTravel = SourceIncludes(source, "FastTravelEnd")
+  Bool locationSource = sourceIsFastTravel || SourceIncludes(source, "LocationChange") || SourceIncludes(source, "CellAttach") || SourceIncludes(source, "CellDetach")
+  Bool locationChanged = (newLocationName != oldLocationName) || (newWorldspaceName != oldWorldspaceName)
+  Bool interiorChanged = isInterior != oldInterior
+  Bool exposureChanged = (previousExposureTier != newExposureTier)
+
+  if toastsEnabled
+    if sourceIsFastTravel
+      String fromLabel = FormatLocationLabel(pendingFastTravelOriginLocation, pendingFastTravelOriginWorldspace)
+      Bool originInterior = pendingFastTravelOriginInterior
+      if fromLabel == "Unknown"
+        fromLabel = FormatLocationLabel(oldLocationName, oldWorldspaceName)
+        originInterior = oldInterior
+      endif
+      String destLabel = FormatLocationLabel(newLocationName, newWorldspaceName)
+      String fromDetail = fromLabel + " (" + FormatInteriorState(originInterior) + ")"
+      String destDetail = destLabel + " (" + FormatInteriorState(isInterior) + ")"
+      ShowToasts("SS: Fast Travel Complete", "From " + fromDetail + " -> " + destDetail, True)
+    elseif locationSource && (locationChanged || interiorChanged)
+      if oldLocationName != "" || oldWorldspaceName != ""
+        String locFrom = FormatLocationLabel(oldLocationName, oldWorldspaceName)
+        String locTo = FormatLocationLabel(newLocationName, newWorldspaceName)
+        ShowToasts("SS: Location Changed", locFrom + " -> " + locTo + " (" + FormatInteriorState(isInterior) + ")", True)
+      endif
+    endif
+
+    if weatherChanged && previousWeather != None && currentWeather != None
+      ShowToasts("SS: Weather Changed", FormatWeatherName(previousWeather) + " -> " + FormatWeatherName(currentWeather), True)
+    elseif weatherChanged && (previousWeather == None || currentWeather == None)
+      ShowToasts("SS: Weather Changed", FormatWeatherName(previousWeather) + " -> " + FormatWeatherName(currentWeather), True)
+    endif
+
+    if exposureChanged && previousExposureTier >= 0
+      ShowToasts("SS: Exposure Tier", "T" + previousExposureTier + " -> T" + newExposureTier, True)
+    endif
+  endif
+
+  if sourceIsFastTravel
+    pendingFastTravelOriginLocation = ""
+    pendingFastTravelOriginWorldspace = ""
+    pendingFastTravelOriginInterior = False
+  endif
+
+  lastKnownLocation = currentLocation
+  lastLocationName = newLocationName
+  lastWorldspace = currentWorldspace
+  lastWorldspaceName = newWorldspaceName
+  lastInteriorState = isInterior
+  lastExposureTier = newExposureTier
 
   lastEvaluateRealTime = Utility.GetCurrentRealTime()
 EndFunction
@@ -386,38 +480,119 @@ Float Function GetWeatherContribution(Int classification)
   return 0.0
 EndFunction
 
-Function MaybeNotifyWeatherChanges(Int regionClass, Int weatherClass)
-  Float gap = GetToastGapSeconds()
-  if gap < 0.0
-    gap = 0.0
-  endif
-
-  Float now = Utility.GetCurrentRealTime()
+Int Function MaybeNotifyWeatherChanges(Int regionClass, Int weatherClass, Weather previousWeather, Weather currentWeather)
+  Int flags = 0
 
   if regionClass != lastRegionBucket
-    String regionMsg = GetRegionToastMessage(regionClass)
-    if regionMsg != "" && (now - lastToastTime) >= gap
-      Debug.Notification(regionMsg)
-      if bTraceLogs
-        Debug.Trace("[SS] Toast: " + regionMsg)
-      endif
-      lastRegionBucket = regionClass
-      lastToastTime = Utility.GetCurrentRealTime()
-      now = lastToastTime
-    endif
+    flags += 1
   endif
 
-  if weatherClass != lastWeatherClass
-    String weatherMsg = GetWeatherToastMessage(weatherClass)
-    Float current = Utility.GetCurrentRealTime()
-    if weatherMsg != "" && (current - lastToastTime) >= gap
-      Debug.Notification(weatherMsg)
-      if bTraceLogs
-        Debug.Trace("[SS] Toast: " + weatherMsg)
-      endif
-      lastWeatherClass = weatherClass
-      lastToastTime = Utility.GetCurrentRealTime()
+  if weatherClass != lastWeatherClass || previousWeather != currentWeather
+    flags += 2
+  endif
+
+  lastRegionBucket = regionClass
+  lastWeatherClass = weatherClass
+  lastWeatherForm = currentWeather
+
+  return flags
+EndFunction
+
+Bool Function AreToastsEnabled()
+  return GetB("ui.toasts.enable", True)
+EndFunction
+
+Bool Function SourceIncludes(String sources, String token)
+  if sources == "" || token == ""
+    return False
+  endif
+  return StringUtil.Find(sources, token) >= 0
+EndFunction
+
+String Function ResolveLocationName(Location loc)
+  if loc != None
+    String name = loc.GetName()
+    if name != ""
+      return name
     endif
+  endif
+  return ""
+EndFunction
+
+String Function ResolveWorldspaceName(WorldSpace ws)
+  if ws != None
+    String name = ws.GetName()
+    if name != ""
+      return name
+    endif
+  endif
+  return ""
+EndFunction
+
+String Function FormatLocationLabel(String locationName, String worldspaceName)
+  if locationName != ""
+    return locationName
+  endif
+  if worldspaceName != ""
+    return worldspaceName
+  endif
+  return "Unknown"
+EndFunction
+
+String Function FormatInteriorState(Bool isInterior)
+  if isInterior
+    return "Interior"
+  endif
+  return "Exterior"
+EndFunction
+
+String Function FormatWeatherName(Weather weatherForm)
+  if weatherForm == None
+    return "Unknown"
+  endif
+  String label = weatherForm.GetName()
+  if label == ""
+    Int formId = weatherForm.GetFormID()
+    label = "Weather 0x" + formId
+  endif
+  if label == ""
+    label = "Unknown"
+  endif
+  return label
+EndFunction
+
+Int Function ComputeExposureTier(Float deficit, Float safeRequirement)
+  if deficit <= 0.0
+    return 0
+  endif
+  if safeRequirement <= 0.0
+    safeRequirement = 1.0
+  endif
+
+  Float ratio = deficit / safeRequirement
+  if ratio < 0.33
+    return 1
+  elseif ratio < 0.66
+    return 2
+  endif
+  return 3
+EndFunction
+
+Function ShowToasts(String label, String detail, Bool allow = True)
+  if !allow
+    return
+  endif
+  if Utility.IsInMenuMode()
+    return
+  endif
+  if label != ""
+    Debug.Notification(label)
+  endif
+  if detail != ""
+    Debug.Notification(detail)
+  endif
+  if bTraceLogs
+    Debug.Trace("[SS] Toast: " + label + " | " + detail)
   endif
 EndFunction
 
@@ -845,6 +1020,11 @@ Function InitConfigDefaults()
   i = JsonUtil.GetPathIntValue(CFG_PATH, "debug.trace", -9999)
   if i == -9999
     JsonUtil.SetPathIntValue(CFG_PATH, "debug.trace", 0)
+  endif
+
+  i = JsonUtil.GetPathIntValue(CFG_PATH, "ui.toasts.enable", -9999)
+  if i == -9999
+    JsonUtil.SetPathIntValue(CFG_PATH, "ui.toasts.enable", 1)
   endif
 
   JsonUtil.Save(CFG_PATH)
