@@ -25,12 +25,12 @@ Int _optWeatherSnowy
 Int _optEnvironmentHeader
 Int _optExteriorAdjust
 Int _optInteriorAdjust
-Int _optToastCooldown
 Int _optNightMultiplier
 Int _optWarmthReadout
 Int _optPenaltyReadout
 Int _optUIHeader
-Int _optToastsEnable
+Int _optImmersionToasts
+Int _optDebugToasts
 
 ; Food & Hunger
 Int _optFoodHeader
@@ -95,11 +95,11 @@ Event OnPageReset(String a_page)
     _optEnvironmentHeader = AddHeaderOption("Environment modifiers")
     _optExteriorAdjust    = AddSliderOption("Exterior adjustment", GetF("weather.cold.exteriorAdjust"), "{0}")
     _optInteriorAdjust    = AddSliderOption("Interior adjustment", GetF("weather.cold.interiorAdjust"), "{0}")
-    _optToastCooldown     = AddSliderOption("Toast cooldown (seconds)", GetF("weather.cold.toastMinGapSeconds"), "{0}")
     _optNightMultiplier   = AddSliderOption("Night multiplier", GetF("weather.cold.nightMultiplier"), "{2}")
 
     _optUIHeader = AddHeaderOption("UI Feedback")
-    _optToastsEnable = AddToggleOption("Show toast notifications", GetB("ui.toasts.enable"))
+    _optImmersionToasts = AddToggleOption("Immersion toasts", GetB("ui.toasts.immersion"))
+    _optDebugToasts     = AddToggleOption("Debug toasts", GetB("ui.toasts.debug"))
 
     _optWarmthReadout = AddTextOption("Current warmth / req:", _currentWarmthDisplay)
     _optPenaltyReadout = AddTextOption("Actual penalties applied", _currentPenaltyDisplay)
@@ -159,10 +159,15 @@ Event OnOptionSelect(Int a_option)
     SetB("debug.trace", v5)
     SetToggleOptionValue(a_option, v5)
 
-  ElseIf a_option == _optToastsEnable
-    Bool v6 = !GetB("ui.toasts.enable")
-    SetB("ui.toasts.enable", v6)
+  ElseIf a_option == _optImmersionToasts
+    Bool v6 = !GetB("ui.toasts.immersion")
+    SetB("ui.toasts.immersion", v6)
     SetToggleOptionValue(a_option, v6)
+
+  ElseIf a_option == _optDebugToasts
+    Bool v7 = !GetB("ui.toasts.debug")
+    SetB("ui.toasts.debug", v7)
+    SetToggleOptionValue(a_option, v7)
 
   ElseIf a_option == _optDebugPing
     Int h = ModEvent.Create("SS_SetCold")
@@ -239,11 +244,6 @@ Event OnOptionSliderOpen(Int a_option)
     SetSliderDialogStartValue(GetF("weather.cold.interiorAdjust"))
     SetSliderDialogRange(-500.0, 500.0)
     SetSliderDialogInterval(10.0)
-
-  ElseIf a_option == _optToastCooldown
-    SetSliderDialogStartValue(GetF("weather.cold.toastMinGapSeconds"))
-    SetSliderDialogRange(0.0, 30.0)
-    SetSliderDialogInterval(1.0)
 
   ElseIf a_option == _optNightMultiplier
     SetSliderDialogStartValue(GetF("weather.cold.nightMultiplier"))
@@ -350,10 +350,6 @@ Event OnOptionSliderAccept(Int a_option, Float a_value)
     SetSliderOptionValue(a_option, a_value, "{0}")
     RefreshWarmthReadout()
     refreshNeeded = True
-
-  ElseIf a_option == _optToastCooldown
-    SetF("weather.cold.toastMinGapSeconds", a_value)
-    SetSliderOptionValue(a_option, a_value, "{0}")
 
   ElseIf a_option == _optNightMultiplier
     SetF("weather.cold.nightMultiplier", a_value)

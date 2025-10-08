@@ -27,7 +27,6 @@ Int   Property LastMagickaPenalty Auto
 Int   Property LastSpeedPenalty Auto
 Int   lastRegionBucket = -99
 Int   lastWeatherClass = -99
-Float lastToastTime = 0.0
 
 ; --- Debug ---
 Bool  bDebugEnabled = False
@@ -57,7 +56,7 @@ String pendingFastTravelOriginLocation = ""
 String pendingFastTravelOriginWorldspace = ""
 Bool   pendingFastTravelOriginInterior = False
 
-Int    lastExposureTier = -1
+Int    lastPreparednessTier = -1
 
 
 ; --- Warmth scoring constants ---
@@ -140,7 +139,6 @@ Event OnInit()
   bRunning = True
   ; instant reactions on gear changes
   RegisterForModEvent("SS_QuickTick", "OnQuickTick")
-  lastToastTime = Utility.GetCurrentRealTime() - GetToastGapSeconds()
   EvaluateWeather("Init")
 EndEvent
 
@@ -176,8 +174,6 @@ Function EvaluateWeather(String source = "Tick")
   String oldWorldspaceName = lastWorldspaceName
   Bool oldInterior = lastInteriorState
   Weather previousWeather = lastWeatherForm
-  Int previousExposureTier = lastExposureTier
-
   Location currentLocation = p.GetCurrentLocation()
   WorldSpace currentWorldspace = p.GetWorldSpace()
   Bool isInterior = p.IsInInterior()
@@ -204,8 +200,11 @@ Function EvaluateWeather(String source = "Tick")
   LastBaseRequirement = baseRequirement
   LastSafeRequirement = safeReq
   LastWeatherBonus    = modifierSum
-  Int changeFlags = MaybeNotifyWeatherChanges(regionClass, weatherClass, previousWeather, currentWeather)
-  Bool weatherChanged = (changeFlags >= 2)
+  Bool forecastChanged = (regionClass != lastRegionBucket)
+  Bool weatherChanged = (currentWeather != lastWeatherForm) || (weatherClass != lastWeatherClass)
+
+  Bool debugToastsEnabled = IsDebugToastsEnabled()
+  Bool immersionToastsEnabled = IsImmersionToastsEnabled()
 
   ; ---- warmth/deficit from gear ----
   Float warmth = GetPlayerWarmthScoreV1(p, autoPer)
@@ -231,7 +230,7 @@ Function EvaluateWeather(String source = "Tick")
   LastStaminaPenalty = staminaPenaltyPct
   LastMagickaPenalty = magickaPenaltyPct
   LastSpeedPenalty   = speedPenaltyPct
-  Int newExposureTier = ComputeExposureTier(deficit, safeReq)
+  Int preparednessTier = DeterminePreparednessTier(warmth, safeReq)
 
   ; ---- penalties mapping ----
   ; ---- apply or clear via driver ----
@@ -284,16 +283,14 @@ Function EvaluateWeather(String source = "Tick")
     LastStaminaPenalty = 0
     LastMagickaPenalty = 0
     LastSpeedPenalty   = 0
-    newExposureTier = 0
   endif
 
   Bool sourceIsFastTravel = SourceIncludes(source, "FastTravelEnd")
   Bool locationSource = sourceIsFastTravel || SourceIncludes(source, "LocationChange") || SourceIncludes(source, "CellAttach") || SourceIncludes(source, "CellDetach")
   Bool locationChanged = (newLocationName != oldLocationName) || (newWorldspaceName != oldWorldspaceName)
   Bool interiorChanged = isInterior != oldInterior
-  Bool exposureChanged = (previousExposureTier != newExposureTier)
 
-  if toastsEnabled
+  if debugToastsEnabled
     if sourceIsFastTravel
       String fromLabel = FormatLocationLabel(pendingFastTravelOriginLocation, pendingFastTravelOriginWorldspace)
       Bool originInterior = pendingFastTravelOriginInterior
@@ -304,23 +301,35 @@ Function EvaluateWeather(String source = "Tick")
       String destLabel = FormatLocationLabel(newLocationName, newWorldspaceName)
       String fromDetail = fromLabel + " (" + FormatInteriorState(originInterior) + ")"
       String destDetail = destLabel + " (" + FormatInteriorState(isInterior) + ")"
-      ShowToasts("SS: Fast Travel Complete", "From " + fromDetail + " -> " + destDetail, True)
+      DispatchToast("SS Debug: Fast Travel", "From " + fromDetail + " -> " + destDetail, "Debug")
     elseif locationSource && (locationChanged || interiorChanged)
       if oldLocationName != "" || oldWorldspaceName != ""
         String locFrom = FormatLocationLabel(oldLocationName, oldWorldspaceName)
         String locTo = FormatLocationLabel(newLocationName, newWorldspaceName)
-        ShowToasts("SS: Location Changed", locFrom + " -> " + locTo + " (" + FormatInteriorState(isInterior) + ")", True)
+        DispatchToast("SS Debug: Location", locFrom + " -> " + locTo + " (" + FormatInteriorState(isInterior) + ")", "Debug")
       endif
     endif
 
-    if weatherChanged && previousWeather != None && currentWeather != None
-      ShowToasts("SS: Weather Changed", FormatWeatherName(previousWeather) + " -> " + FormatWeatherName(currentWeather), True)
-    elseif weatherChanged && (previousWeather == None || currentWeather == None)
-      ShowToasts("SS: Weather Changed", FormatWeatherName(previousWeather) + " -> " + FormatWeatherName(currentWeather), True)
+    if weatherChanged
+      String prevWeatherName = FormatWeatherName(previousWeather)
+      String newWeatherName = FormatWeatherName(currentWeather)
+      DispatchToast("SS Debug: Weather", prevWeatherName + " -> " + newWeatherName, "Debug")
     endif
 
-    if exposureChanged && previousExposureTier >= 0
-      ShowToasts("SS: Exposure Tier", "T" + previousExposureTier + " -> T" + newExposureTier, True)
+    if preparednessTier != lastPreparednessTier && lastPreparednessTier >= 0
+      DispatchToast("SS Debug: Preparedness", "Tier " + lastPreparednessTier + " -> Tier " + preparednessTier, "Debug")
+    endif
+  endif
+
+  if immersionToastsEnabled
+    if forecastChanged
+      DispatchToast("SS Forecast", GetForecastToastMessage(regionClass), "Immersion")
+    endif
+    if weatherChanged
+      DispatchToast("SS Weather", GetCurrentWeatherToastMessage(currentWeather), "Immersion")
+    endif
+    if preparednessTier != lastPreparednessTier
+      DispatchToast("SS Preparedness", GetPreparednessToastMessage(preparednessTier), "Immersion")
     endif
   endif
 
@@ -335,7 +344,10 @@ Function EvaluateWeather(String source = "Tick")
   lastWorldspace = currentWorldspace
   lastWorldspaceName = newWorldspaceName
   lastInteriorState = isInterior
-  lastExposureTier = newExposureTier
+  lastPreparednessTier = preparednessTier
+  lastRegionBucket = regionClass
+  lastWeatherClass = weatherClass
+  lastWeatherForm = currentWeather
 
   lastEvaluateRealTime = Utility.GetCurrentRealTime()
 EndFunction
@@ -480,33 +492,19 @@ Float Function GetWeatherContribution(Int classification)
   return 0.0
 EndFunction
 
-Int Function MaybeNotifyWeatherChanges(Int regionClass, Int weatherClass, Weather previousWeather, Weather currentWeather)
-  Int flags = 0
-
-  if regionClass != lastRegionBucket
-    flags += 1
-  endif
-
-  if weatherClass != lastWeatherClass || previousWeather != currentWeather
-    flags += 2
-  endif
-
-  lastRegionBucket = regionClass
-  lastWeatherClass = weatherClass
-  lastWeatherForm = currentWeather
-
-  return flags
-EndFunction
-
-Bool Function AreToastsEnabled()
-  return GetB("ui.toasts.enable", True)
-EndFunction
-
 Bool Function SourceIncludes(String sources, String token)
   if sources == "" || token == ""
     return False
   endif
   return StringUtil.Find(sources, token) >= 0
+EndFunction
+
+Bool Function IsDebugToastsEnabled()
+  return GetB("ui.toasts.debug", False)
+EndFunction
+
+Bool Function IsImmersionToastsEnabled()
+  return GetB("ui.toasts.immersion", True)
 EndFunction
 
 String Function ResolveLocationName(Location loc)
@@ -553,7 +551,7 @@ String Function FormatWeatherName(Weather weatherForm)
   String label = weatherForm.GetName()
   if label == ""
     Int formId = weatherForm.GetFormID()
-    label = "Weather 0x" + formId
+    label = "Weather FormID " + formId
   endif
   if label == ""
     label = "Unknown"
@@ -561,27 +559,68 @@ String Function FormatWeatherName(Weather weatherForm)
   return label
 EndFunction
 
-Int Function ComputeExposureTier(Float deficit, Float safeRequirement)
-  if deficit <= 0.0
-    return 0
-  endif
+Int Function DeterminePreparednessTier(Float warmth, Float safeRequirement)
   if safeRequirement <= 0.0
-    safeRequirement = 1.0
+    return 4
   endif
 
-  Float ratio = deficit / safeRequirement
-  if ratio < 0.33
+  Float ratio = warmth / safeRequirement
+  if ratio < 0.25
+    return 0
+  elseif ratio < 0.50
     return 1
-  elseif ratio < 0.66
+  elseif ratio < 0.75
     return 2
+  elseif ratio < 1.0
+    return 3
   endif
-  return 3
+  return 4
 EndFunction
 
-Function ShowToasts(String label, String detail, Bool allow = True)
-  if !allow
-    return
+String Function GetPreparednessToastMessage(Int tier)
+  if tier <= 0
+    return "I am freezing!"
+  elseif tier == 1
+    return "I am cold!"
+  elseif tier == 2
+    return "I feel the breeze."
+  elseif tier == 3
+    return "I am a bit under-dressed."
   endif
+  return "I am comfortable."
+EndFunction
+
+String Function GetForecastToastMessage(Int classification)
+  if classification == 0
+    return "Forecast shifts to clear."
+  elseif classification == 1
+    return "Forecast shifts to cloudy."
+  elseif classification == 2
+    return "Forecast shifts to rain."
+  elseif classification == 3
+    return "Forecast shifts to snow."
+  endif
+  return "Forecast shifts."
+EndFunction
+
+String Function GetCurrentWeatherToastMessage(Weather weatherForm)
+  if weatherForm == None
+    return "The weather shifts."
+  endif
+  Int class = weatherForm.GetClassification()
+  if class == 0
+    return "The sky clears."
+  elseif class == 1
+    return "Clouds are gathering above."
+  elseif class == 2
+    return "Raindrops begin to fall."
+  elseif class == 3
+    return "Snowflakes drift from the sky."
+  endif
+  return "The weather shifts."
+EndFunction
+
+Function DispatchToast(String label, String detail, String category)
   if Utility.IsInMenuMode()
     return
   endif
@@ -592,38 +631,8 @@ Function ShowToasts(String label, String detail, Bool allow = True)
     Debug.Notification(detail)
   endif
   if bTraceLogs
-    Debug.Trace("[SS] Toast: " + label + " | " + detail)
+    Debug.Trace("[SS][" + category + "] " + label + " | " + detail)
   endif
-EndFunction
-
-Float Function GetToastGapSeconds()
-  return GetF("weather.cold.toastMinGapSeconds", 5.0)
-EndFunction
-
-String Function GetRegionToastMessage(Int classification)
-  if classification == 0
-    return "Warm Region: The weather here is generally mild and pleasant."
-  elseif classification == 1
-    return "Cloudy Region: Skies here are often overcast."
-  elseif classification == 2
-    return "Rainy Region: The weather here is usually wet and rainy."
-  elseif classification == 3
-    return "Snowy Region: The weather here is normally snowy."
-  endif
-  return "Unknown Region: Climate data unavailable."
-EndFunction
-
-String Function GetWeatherToastMessage(Int classification)
-  if classification == 0
-    return "Pleasant weather: Clear and fair."
-  elseif classification == 1
-    return "Cloudy weather: Clouds gather above."
-  elseif classification == 2
-    return "Rainy weather: Rain is falling."
-  elseif classification == 3
-    return "Snowy weather: It's snowing!"
-  endif
-  return "Weather changed: (unclassified)"
 EndFunction
 
 Int Function ComputePenaltyPercent(Float deficit, Float safeRequirement, Int maxPenalty)
@@ -990,11 +999,6 @@ Function InitConfigDefaults()
     JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.nightMultiplier", 1.25)
   endif
 
-  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.toastMinGapSeconds", -9999.0)
-  if f == -9999.0
-    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.toastMinGapSeconds", 5.0)
-  endif
-
   f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.minRefreshGapSeconds", -9999.0)
   if f == -9999.0
     JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.minRefreshGapSeconds", kMinRefreshGapSeconds)
@@ -1022,9 +1026,13 @@ Function InitConfigDefaults()
     JsonUtil.SetPathIntValue(CFG_PATH, "debug.trace", 0)
   endif
 
-  i = JsonUtil.GetPathIntValue(CFG_PATH, "ui.toasts.enable", -9999)
+  i = JsonUtil.GetPathIntValue(CFG_PATH, "ui.toasts.debug", -9999)
   if i == -9999
-    JsonUtil.SetPathIntValue(CFG_PATH, "ui.toasts.enable", 1)
+    JsonUtil.SetPathIntValue(CFG_PATH, "ui.toasts.debug", 0)
+  endif
+  i = JsonUtil.GetPathIntValue(CFG_PATH, "ui.toasts.immersion", -9999)
+  if i == -9999
+    JsonUtil.SetPathIntValue(CFG_PATH, "ui.toasts.immersion", 1)
   endif
 
   JsonUtil.Save(CFG_PATH)
