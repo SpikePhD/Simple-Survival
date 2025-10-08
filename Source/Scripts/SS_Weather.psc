@@ -185,8 +185,6 @@ Function EvaluateWeather(String source = "Tick")
     Debug.Trace("[SS] EvaluateWeather (" + source + ")")
   endif
 
-  Bool toastsEnabled = AreToastsEnabled()
-
   ; ---- read config ----
   Bool  coldOn    = GetB("weather.cold.enable", True)
   Float baseRequirement = ReadBaseRequirement()
@@ -607,14 +605,14 @@ String Function GetCurrentWeatherToastMessage(Weather weatherForm)
   if weatherForm == None
     return "The weather shifts."
   endif
-  Int class = weatherForm.GetClassification()
-  if class == 0
+  Int skyClass = weatherForm.GetClassification()
+  if skyClass == 0
     return "The sky clears."
-  elseif class == 1
+  elseif skyClass == 1
     return "Clouds are gathering above."
-  elseif class == 2
+  elseif skyClass == 2
     return "Raindrops begin to fall."
-  elseif class == 3
+  elseif skyClass == 3
     return "Snowflakes drift from the sky."
   endif
   return "The weather shifts."
