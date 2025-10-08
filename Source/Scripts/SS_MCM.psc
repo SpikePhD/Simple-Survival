@@ -74,6 +74,7 @@ Event OnPageReset(String a_page)
     _optColdEnable    = AddToggleOption("Enable cold effects", GetB("weather.cold.enable"))
 
     UpdateWarmthCache()
+    UpdatePenaltyCache()
     _optWarmthReq   = AddTextOption("Warmth required to be safe", _currentRequirementDisplay)
     _optBaseWarmth  = AddSliderOption("Base warmth value", GetF("weather.cold.baseRequirement"), "{0}")
 
@@ -97,7 +98,6 @@ Event OnPageReset(String a_page)
 
     _optWarmthReadout = AddTextOption("Current warmth / req:", _currentWarmthDisplay)
     _optPenaltyReadout = AddTextOption("Actual penalties applied", _currentPenaltyDisplay)
-    RefreshWarmthReadout()
 
     AddEmptyOption()
 

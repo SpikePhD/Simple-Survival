@@ -40,6 +40,11 @@ Float kNormalTickH  = 0.10       ; 6  in-game minutes
 Float kSlowTickH    = 0.40       ; 24 in-game minutes
 Float kColdDrainFrac = 0.05
 Float kColdFloorFrac = 0.20
+Float kMinRefreshGapSeconds = 0.3
+
+Bool  bRefreshQueued = False
+String queuedSource = ""
+Float lastEvaluateRealTime = 0.0
 
 
 ; --- Warmth scoring constants ---
@@ -57,8 +62,47 @@ Function ConfigureModule(Spell ability)
   EnsurePlayerHasAbility()
 EndFunction
 
-Function RequestFastTick()
-  EvaluateWeather("RequestFastTick")
+Function RequestFastTick(String source = "RequestFastTick")
+  RequestEvaluate(source)
+EndFunction
+
+Function RequestEvaluate(String source, Bool forceImmediate = False)
+  if forceImmediate
+    if bRefreshQueued
+      bRefreshQueued = False
+      queuedSource = ""
+    endif
+    EvaluateWeather(source)
+    return
+  endif
+
+  Float now = Utility.GetCurrentRealTime()
+  Float minGap = GetMinRefreshGapSeconds()
+  Float elapsed = now - lastEvaluateRealTime
+
+  if elapsed >= minGap || elapsed < 0.0
+    if bRefreshQueued
+      bRefreshQueued = False
+      queuedSource = ""
+    endif
+    EvaluateWeather(source)
+    return
+  endif
+
+  if queuedSource != ""
+    queuedSource = queuedSource + "|" + source
+  else
+    queuedSource = source
+  endif
+
+  if !bRefreshQueued
+    bRefreshQueued = True
+    Float delay = minGap - elapsed
+    if delay < 0.05
+      delay = 0.05
+    endif
+    RegisterForSingleUpdate(delay)
+  endif
 EndFunction
 
 ; =======================
@@ -98,6 +142,7 @@ Function EvaluateWeather(String source = "Tick")
     LastStaminaPenalty = 0
     LastMagickaPenalty = 0
     LastSpeedPenalty   = 0
+    lastEvaluateRealTime = Utility.GetCurrentRealTime()
     return
   endif
 
@@ -198,6 +243,7 @@ Function EvaluateWeather(String source = "Tick")
     LastSpeedPenalty   = 0
   endif
 
+  lastEvaluateRealTime = Utility.GetCurrentRealTime()
 EndFunction
 
 Function ApplyColdResourceDrain(Actor p)
@@ -774,6 +820,11 @@ Function InitConfigDefaults()
     JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.toastMinGapSeconds", 5.0)
   endif
 
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.minRefreshGapSeconds", -9999.0)
+  if f == -9999.0
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.minRefreshGapSeconds", kMinRefreshGapSeconds)
+  endif
+
   ; cold.enable
   Int i = JsonUtil.GetPathIntValue(CFG_PATH, "weather.cold.enable", -9999)
   if i == -9999
@@ -803,7 +854,7 @@ Event OnQuickTick(String speedStr, Float regenMult)
   if bTraceLogs
     Debug.Trace("[SS] QuickTick request received -> evaluate")
   endif
-  EvaluateWeather("QuickTick")
+  RequestEvaluate("QuickTick", True)
 EndEvent
 
 Function ApplyDebugFlags()
@@ -813,5 +864,29 @@ Function ApplyDebugFlags()
     Debug.Trace("[SS] Controller init: debug=" + bDebugEnabled + " trace=1")
   endif
 
+EndFunction
+
+Event OnUpdate()
+  if !bRefreshQueued
+    return
+  endif
+
+  bRefreshQueued = False
+  String source = queuedSource
+  queuedSource = ""
+
+  if source == ""
+    source = "Queued"
+  endif
+
+  EvaluateWeather(source)
+EndEvent
+
+Float Function GetMinRefreshGapSeconds()
+  Float configured = GetF("weather.cold.minRefreshGapSeconds", kMinRefreshGapSeconds)
+  if configured <= 0.0
+    return kMinRefreshGapSeconds
+  endif
+  return configured
 EndFunction
 
