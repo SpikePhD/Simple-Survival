@@ -651,39 +651,40 @@ Function DispatchToast(String label, String detail, String category)
     return
   endif
 
-  String toastText = ""
+  String message = ""
   if label != ""
-    toastText = label
+    message = label
   endif
 
   if detail != ""
-    if toastText != ""
-      toastText = toastText + " " + detail
+    if message != ""
+      message = message + " " + detail
     else
-      toastText = detail
+      message = detail
     endif
   endif
 
-  if toastText == ""
+  message = StringUtil.Trim(message)
+  if message == ""
     return
   endif
 
   Float now = Utility.GetCurrentRealTime()
   Float elapsed = now - lastToastRealTime
 
-  if toastText == lastToastMessage
+  if message == lastToastMessage
     if elapsed >= 0.0 && elapsed < kToastCooldownSeconds
       return
     endif
   endif
 
   lastToastRealTime = now
-  lastToastMessage = toastText
+  lastToastMessage = message
 
-  Debug.Notification(toastText)
+  Debug.Notification(message)
 
   if bTraceLogs
-    Debug.Trace("[SS][" + category + "] " + toastText)
+    Debug.Trace("[SS][" + category + "] " + message)
   endif
 EndFunction
 
