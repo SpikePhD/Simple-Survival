@@ -3,7 +3,7 @@ Scriptname SS_AbilityDriver extends ActiveMagicEffect
 Import JsonUtil
 
 ; ---- Config / Debug ----
-String Property CFG_PATH = "Data\\SKSE\\Plugins\\SS\\config.json" Auto
+String Property CFG_PATH = "Data\\SKSE\\Plugins\\StorageUtilData\\SS\\SS_config.json" Auto
 Float Property DamagePerSecond = 5.0 Auto
 Float Property DamageTickInterval = 1.0 Auto
 Bool bTraceLogs = False

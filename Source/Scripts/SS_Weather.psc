@@ -6,7 +6,7 @@ Scriptname SS_Weather extends Quest
 Import JsonUtil
 Import StringUtil
 Import Math
-String Property CFG_PATH = "Data\\SKSE\\Plugins\\SS\\config.json" Auto
+String Property CFG_PATH = "Data\\SKSE\\Plugins\\StorageUtilData\\SS\\SS_config.json" Auto
 
 ; =======================
 ; Ability / Forms / Keywords
