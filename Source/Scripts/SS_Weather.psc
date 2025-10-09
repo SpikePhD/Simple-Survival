@@ -40,10 +40,13 @@ Float kSlowTickH    = 0.40       ; 24 in-game minutes
 Float kColdDrainFrac = 0.05
 Float kColdFloorFrac = 0.20
 Float kMinRefreshGapSeconds = 0.3
+Float kToastCooldownSeconds = 1.0
 
 Bool  bRefreshQueued = False
 String queuedSource = ""
 Float lastEvaluateRealTime = 0.0
+Float lastToastRealTime = 0.0
+String lastToastMessage = ""
 
 Location lastKnownLocation
 String   lastLocationName = ""
@@ -299,35 +302,60 @@ Function EvaluateWeather(String source = "Tick")
       String destLabel = FormatLocationLabel(newLocationName, newWorldspaceName)
       String fromDetail = fromLabel + " (" + FormatInteriorState(originInterior) + ")"
       String destDetail = destLabel + " (" + FormatInteriorState(isInterior) + ")"
-      DispatchToast("SS Debug: Fast Travel", "From " + fromDetail + " -> " + destDetail, "Debug")
+      DispatchToast("Debug Fast Travel:", "From " + fromDetail + " -> " + destDetail, "Debug")
     elseif locationSource && (locationChanged || interiorChanged)
       if oldLocationName != "" || oldWorldspaceName != ""
         String locFrom = FormatLocationLabel(oldLocationName, oldWorldspaceName)
         String locTo = FormatLocationLabel(newLocationName, newWorldspaceName)
-        DispatchToast("SS Debug: Location", locFrom + " -> " + locTo + " (" + FormatInteriorState(isInterior) + ")", "Debug")
+        DispatchToast("Debug Location:", locFrom + " -> " + locTo + " (" + FormatInteriorState(isInterior) + ")", "Debug")
       endif
     endif
 
     if weatherChanged
       String prevWeatherName = FormatWeatherName(previousWeather)
       String newWeatherName = FormatWeatherName(currentWeather)
-      DispatchToast("SS Debug: Weather", prevWeatherName + " -> " + newWeatherName, "Debug")
+      DispatchToast("Debug Weather:", prevWeatherName + " -> " + newWeatherName, "Debug")
     endif
 
     if preparednessTier != lastPreparednessTier && lastPreparednessTier >= 0
-      DispatchToast("SS Debug: Preparedness", "Tier " + lastPreparednessTier + " -> Tier " + preparednessTier, "Debug")
+      DispatchToast("Debug Preparedness:", "Tier " + lastPreparednessTier + " -> Tier " + preparednessTier, "Debug")
     endif
   endif
 
   if immersionToastsEnabled
-    if forecastChanged
-      DispatchToast("SS Forecast", GetForecastToastMessage(regionClass), "Immersion")
+    Bool isTriggerSource = True
+    if source == ""
+      isTriggerSource = False
+    elseif SourceIncludes(source, "Tick")
+      isTriggerSource = False
     endif
-    if weatherChanged
-      DispatchToast("SS Weather", GetCurrentWeatherToastMessage(currentWeather), "Immersion")
+
+    if !isTriggerSource
+      if forecastChanged || weatherChanged || locationChanged || interiorChanged || sourceIsFastTravel
+        isTriggerSource = True
+      endif
     endif
-    if preparednessTier != lastPreparednessTier
-      DispatchToast("SS Preparedness", GetPreparednessToastMessage(preparednessTier), "Immersion")
+
+    if isTriggerSource
+      String forecastMessage = GetForecastToastMessage(regionClass)
+      String weatherMessage = GetCurrentWeatherToastMessage(currentWeather)
+      String combinedMessage = ""
+
+      if forecastMessage != ""
+        combinedMessage = forecastMessage
+      endif
+
+      if weatherMessage != ""
+        if combinedMessage != ""
+          combinedMessage = combinedMessage + " " + weatherMessage
+        else
+          combinedMessage = weatherMessage
+        endif
+      endif
+
+      if combinedMessage != ""
+        DispatchToast("", combinedMessage, "Immersion")
+      endif
     endif
   endif
 
@@ -590,46 +618,72 @@ EndFunction
 
 String Function GetForecastToastMessage(Int classification)
   if classification == 0
-    return "Forecast shifts to clear."
+    return "Normally here the weather is pleasant."
   elseif classification == 1
-    return "Forecast shifts to cloudy."
+    return "In this area, it's usual to see clouds in the sky."
   elseif classification == 2
-    return "Forecast shifts to rain."
+    return "It's a very wet area, rains are common here."
   elseif classification == 3
-    return "Forecast shifts to snow."
+    return "This area is normally covered in snow."
   endif
-  return "Forecast shifts."
+  return "The local climate is uncertain."
 EndFunction
 
 String Function GetCurrentWeatherToastMessage(Weather weatherForm)
   if weatherForm == None
-    return "The weather shifts."
+    return "The weather is hard to read right now."
   endif
   Int skyClass = weatherForm.GetClassification()
   if skyClass == 0
-    return "The sky clears."
+    return "The skies are clear."
   elseif skyClass == 1
-    return "Clouds are gathering above."
+    return "Clouds are covering the sky."
   elseif skyClass == 2
-    return "Raindrops begin to fall."
+    return "Rain is pouring from above!"
   elseif skyClass == 3
-    return "Snowflakes drift from the sky."
+    return "It's snowing, I better be ready."
   endif
-  return "The weather shifts."
+  return "The weather is shifting."
 EndFunction
 
 Function DispatchToast(String label, String detail, String category)
   if Utility.IsInMenuMode()
     return
   endif
+
+  String toastText = ""
   if label != ""
-    Debug.Notification(label)
+    toastText = label
   endif
+
   if detail != ""
-    Debug.Notification(detail)
+    if toastText != ""
+      toastText = toastText + " " + detail
+    else
+      toastText = detail
+    endif
   endif
+
+  if toastText == ""
+    return
+  endif
+
+  Float now = Utility.GetCurrentRealTime()
+  Float elapsed = now - lastToastRealTime
+
+  if toastText == lastToastMessage
+    if elapsed >= 0.0 && elapsed < kToastCooldownSeconds
+      return
+    endif
+  endif
+
+  lastToastRealTime = now
+  lastToastMessage = toastText
+
+  Debug.Notification(toastText)
+
   if bTraceLogs
-    Debug.Trace("[SS][" + category + "] " + label + " | " + detail)
+    Debug.Trace("[SS][" + category + "] " + toastText)
   endif
 EndFunction
 
