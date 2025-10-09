@@ -664,7 +664,7 @@ Function DispatchToast(String label, String detail, String category)
     endif
   endif
 
-  toastMessage = StringUtil.Trim(toastMessage)
+  toastMessage = TrimWhitespace(toastMessage)
   if toastMessage == ""
     return
   endif
@@ -686,6 +686,64 @@ Function DispatchToast(String label, String detail, String category)
   if bTraceLogs
     Debug.Trace("[SS][" + category + "] " + toastMessage)
   endif
+EndFunction
+
+String Function TrimWhitespace(String value)
+  Int totalLength = StringUtil.GetLength(value)
+  if totalLength <= 0
+    return ""
+  endif
+
+  Int startIndex = 0
+  Bool foundLeading = False
+  while startIndex < totalLength && !foundLeading
+    String currentChar = StringUtil.GetNthChar(value, startIndex)
+    if !IsWhitespaceChar(currentChar)
+      foundLeading = True
+    else
+      startIndex += 1
+    endif
+  endwhile
+
+  if startIndex >= totalLength
+    return ""
+  endif
+
+  Int endIndex = totalLength - 1
+  Bool foundTrailing = False
+  while endIndex >= startIndex && !foundTrailing
+    String trailingChar = StringUtil.GetNthChar(value, endIndex)
+    if !IsWhitespaceChar(trailingChar)
+      foundTrailing = True
+    else
+      endIndex -= 1
+    endif
+  endwhile
+
+  Int trimmedLength = (endIndex - startIndex) + 1
+  if trimmedLength <= 0
+    return ""
+  endif
+
+  return StringUtil.Substring(value, startIndex, trimmedLength)
+EndFunction
+
+Bool Function IsWhitespaceChar(String charValue)
+  if StringUtil.GetLength(charValue) <= 0
+    return False
+  endif
+
+  Int codeValue = StringUtil.AsOrd(charValue)
+  if codeValue == 32
+    return True
+  elseif codeValue == 9
+    return True
+  elseif codeValue == 10
+    return True
+  elseif codeValue == 13
+    return True
+  endif
+  return False
 EndFunction
 
 Int Function ComputePenaltyPercent(Float deficit, Float safeRequirement, Int maxPenalty)
