@@ -109,7 +109,7 @@ Event OnPageReset(String a_page)
     _optDebugHeader = AddHeaderOption("Debug")
     _optDebugEnable = AddToggleOption("Enable on-screen debug", GetB("debug.enable"))
     _optDebugTrace  = AddToggleOption("Write traces to Papyrus log", GetB("debug.trace"))
-    _optDebugPing   = AddTextOption("Ping driver (test event)", "Send")
+    _optDebugPing   = AddTextOption("Force refresh", "Send")
 
   ElseIf a_page == "Food"
     _optFoodHeader    = AddHeaderOption("Food & Hunger")
@@ -170,15 +170,7 @@ Event OnOptionSelect(Int a_option)
     SetToggleOptionValue(a_option, v7)
 
   ElseIf a_option == _optDebugPing
-    Int h = ModEvent.Create("SS_SetCold")
-    If h
-      ModEvent.PushInt(h, 40)
-      ModEvent.PushInt(h, 40)
-      ModEvent.PushInt(h, 40)
-      ModEvent.PushInt(h, 20)
-      ModEvent.Send(h)
-      Debug.Notification("SS: Ping sent (test penalties)")
-    EndIf
+    RequestControllerRefresh("MCM")
   EndIf
 
   If refreshNeeded
