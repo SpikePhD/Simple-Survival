@@ -5,7 +5,7 @@ Import JsonUtil
 ; ----------------------------
 ; Constants / keys
 ; ----------------------------
-String Property CFG_PATH = "Data\\SKSE\\Plugins\\StorageUtilData\\SS\\SS_config.json" Auto
+String Property CFG_PATH = "Data\\SKSE\\Plugins\\SS\\config.json" Auto
 
 ; Weather
 Int _optWeatherHeader

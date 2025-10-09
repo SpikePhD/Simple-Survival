@@ -5,35 +5,32 @@
     "Spoiling": true,
     "Fatigue": true
   },
-  "Tick": {
-    "Hours": 0.08
-  },
-  "weather": {
-    "cold": {
-      "enable": 1,
-      "safeThreshold": 0.0,
-      "baseRequirement": 200.0,
-      "autoWarmthPerPiece": 100.0,
-      "region": {
-        "pleasant": 0.0,
-        "cloudy": 30.0,
-        "rainy": 60.0,
-        "snowy": 120.0
-      },
-      "weather": {
-        "pleasant": 0.0,
-        "cloudy": 25.0,
-        "rainy": 75.0,
-        "snowy": 125.0
-      },
-      "exteriorAdjust": 50.0,
-      "interiorAdjust": -50.0,
-      "nightMultiplier": 1.25,
-      "minRefreshGapSeconds": 0.3,
-      "tick": 0.0
-    }
-  },
-  "Cold": {
+"Tick": { "Hours": 0.08 },
+
+"weather": {
+  "cold": {
+    "enable": 1,
+    "baseRequirement": 200.0,
+    "region": {
+      "pleasant": 0.0,
+      "cloudy": 30.0,
+      "rainy": 60.0,
+      "snowy": 120.0
+    },
+    "weather": {
+      "pleasant": 0.0,
+      "cloudy": 25.0,
+      "rainy": 75.0,
+      "snowy": 125.0
+    },
+    "exteriorAdjust": 50.0,
+    "interiorAdjust": -50.0,
+    "nightMultiplier": 1.25,
+    "toastMinGapSeconds": 5.0
+  }
+},
+
+"Cold": {
     "SafeWarmth": 400,
     "SnowBase": 300,
     "BlizzardBonus": 150,
@@ -48,6 +45,7 @@
     "BleedStartDeficit": 120,
     "BleedHpPerTickAtDef200": 2.0
   },
+
   "Hunger": {
     "Enabled": true,
     "GraceHours": 3,
@@ -56,12 +54,14 @@
     "MaxStatLossPctAt100": 15,
     "StarveBleed": true
   },
+
   "Food": {
     "Spoiling": true,
     "RawHours": 24,
     "CookedHours": 96,
     "UseStale": true
   },
+
   "Rest": {
     "Enabled": true,
     "GraceHours": 3,
@@ -70,15 +70,5 @@
     "LimitBedroll5h": true,
     "LimitWilderness5h": true,
     "InnBonus": true
-  },
-  "debug": {
-    "enable": 0,
-    "trace": 0
-  },
-  "ui": {
-    "toasts": {
-      "debug": 0,
-      "immersion": 1
-    }
   }
 }
