@@ -35,6 +35,7 @@ Int _optWeatherSnowy
 Int _optEnvironmentHeader
 Int _optExteriorAdjust
 Int _optInteriorAdjust
+Int _optSwimWarmthMalus
 Int _optNightMultiplier
 Int _optWarmthReadout
 Int _optPenaltyReadout
@@ -150,6 +151,7 @@ Event OnPageReset(String a_page)
     _optEnvironmentHeader = AddHeaderOption("Environment modifiers")
     _optExteriorAdjust    = AddSliderOption("Exterior adjustment", GetF("weather.cold.exteriorAdjust"), "{0}")
     _optInteriorAdjust    = AddSliderOption("Interior adjustment", GetF("weather.cold.interiorAdjust"), "{0}")
+    _optSwimWarmthMalus   = AddSliderOption("Swimming warmth malus", GetF("weather.cold.swimWarmthMalus"), "{0}")
     _optNightMultiplier   = AddSliderOption("Night multiplier", GetF("weather.cold.nightMultiplier"), "{2}")
 
     _optUIHeader = AddHeaderOption("UI Feedback")
@@ -289,6 +291,11 @@ Event OnOptionSliderOpen(Int a_option)
     SetSliderDialogRange(-500.0, 500.0)
     SetSliderDialogInterval(10.0)
 
+  ElseIf a_option == _optSwimWarmthMalus
+    SetSliderDialogStartValue(GetF("weather.cold.swimWarmthMalus"))
+    SetSliderDialogRange(-500.0, 0.0)
+    SetSliderDialogInterval(5.0)
+
   ElseIf a_option == _optNightMultiplier
     SetSliderDialogStartValue(GetF("weather.cold.nightMultiplier"))
     SetSliderDialogRange(1.0, 2.0)
@@ -391,6 +398,12 @@ Event OnOptionSliderAccept(Int a_option, Float a_value)
 
   ElseIf a_option == _optInteriorAdjust
     SetF("weather.cold.interiorAdjust", a_value)
+    SetSliderOptionValue(a_option, a_value, "{0}")
+    RefreshWarmthReadout()
+    refreshNeeded = True
+
+  ElseIf a_option == _optSwimWarmthMalus
+    SetF("weather.cold.swimWarmthMalus", a_value)
     SetSliderOptionValue(a_option, a_value, "{0}")
     RefreshWarmthReadout()
     refreshNeeded = True

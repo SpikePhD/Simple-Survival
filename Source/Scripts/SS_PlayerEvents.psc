@@ -4,11 +4,14 @@ Import PO3_Events_Alias
 
 Quest Property ControllerQuest Auto
 Float sleepStartGameTime = 0.0
+Bool  lastSwimmingState = False
 
 Event OnInit()
   RegisterForWeatherChange(Self)
   RegisterForOnPlayerFastTravelEnd(Self)
   TriggerEnvironmentRefresh("Init")
+  lastSwimmingState = ResolveCurrentSwimmingState()
+  RegisterForSingleUpdate(0.5)
 EndEvent
 
 Event OnLocationChange(Location akOldLoc, Location akNewLoc)
@@ -56,6 +59,32 @@ Event OnPlayerFastTravelEnd(Float afTravelGameTimeHours)
   TriggerEnvironmentRefresh("FastTravelEnd", controller)
 EndEvent
 
+Event OnPlayerLoadGame()
+  lastSwimmingState = ResolveCurrentSwimmingState()
+  RegisterForSingleUpdate(0.5)
+EndEvent
+
+Event OnUpdate()
+  SS_Controller controller = ResolveController()
+  Bool isSwimming = ResolveCurrentSwimmingState()
+  if isSwimming != lastSwimmingState
+    lastSwimmingState = isSwimming
+    String source = "SwimmingStop"
+    if isSwimming
+      source = "SwimmingStart"
+    endif
+    TriggerEnvironmentRefresh(source, controller)
+  elseif isSwimming && controller != None
+    controller.RequestRefresh("Swimming")
+  endif
+
+  Float nextInterval = 1.5
+  if isSwimming
+    nextInterval = 0.5
+  endif
+  RegisterForSingleUpdate(nextInterval)
+EndEvent
+
 Function TriggerEnvironmentRefresh(String source = "", SS_Controller cachedController = None)
   SS_Controller controller = cachedController
   if controller == None
@@ -86,4 +115,12 @@ SS_Controller Function ResolveController()
   endif
 
   return controller
+EndFunction
+
+Bool Function ResolveCurrentSwimmingState()
+  Actor player = Game.GetPlayer()
+  if player == None
+    return False
+  endif
+  return player.IsSwimming()
 EndFunction
