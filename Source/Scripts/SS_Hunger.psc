@@ -671,24 +671,32 @@ Function LoadFoodConsumptionConfig()
     configuredCount = 0
   endif
 
-  if extraCount <= 0
-    extraFoodKeywords = None
-  else
-    extraFoodKeywords = new Keyword[0]
+  Int entryLimit = 128
+  Int i = 0
 
-    Int i = 0
-    while i < extraCount
-      String basePath = "hunger.food.extraKeywords[" + Utility.ToString(i) + "]"
-      String keywordName = JsonUtil.GetPathStringValue(CFG_PATH, basePath, "")
-      Keyword keywordEntry = ResolveKeyword(keywordName)
-      extraFoodKeywords = extraFoodKeywords + keywordEntry
-      i += 1
-    endwhile
+  extraFoodKeywords = None
+  extraFoodKeywordCount = 0
 
-    if extraFoodKeywords != None && extraFoodKeywords.Length <= 0
-      extraFoodKeywords = None
+  while i < configuredCount && extraFoodKeywordCount < entryLimit
+    String basePath = "hunger.food.extraKeywords[" + Utility.ToString(i) + "]"
+    String keywordName = JsonUtil.GetPathStringValue(CFG_PATH, basePath, "")
+    Keyword keywordEntry = ResolveKeyword(keywordName)
+
+    if keywordEntry != None
+      if extraFoodKeywords == None
+        extraFoodKeywords = new Keyword[1]
+        extraFoodKeywords[0] = keywordEntry
+      else
+        extraFoodKeywords = extraFoodKeywords + keywordEntry
+      endif
+
+      extraFoodKeywordCount = extraFoodKeywords.Length
     endif
-  endif
+
+    i += 1
+  endwhile
+
+  Bool hitLimit = i < configuredCount
 
   if configuredCount > entryLimit || hitLimit
     TraceHunger("Extra food keyword list hit the Papyrus 128 entry limit, ignoring additional entries.")
