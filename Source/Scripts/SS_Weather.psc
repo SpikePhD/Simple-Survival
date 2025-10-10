@@ -256,7 +256,11 @@ Function EvaluateWeather(String source = "Tick")
       ModEvent.PushInt(h, staminaPenaltyPct)
       ModEvent.PushInt(h, magickaPenaltyPct)
       ModEvent.PushInt(h, speedPenaltyPct)
-      ModEvent.PushInt(h, preparednessTier)
+      Int tierPayload = preparednessTier
+      if !useTierSystem
+        tierPayload = -1
+      endif
+      ModEvent.PushInt(h, tierPayload)
       ModEvent.Send(h)
 
       if bDebugEnabled
@@ -264,30 +268,16 @@ Function EvaluateWeather(String source = "Tick")
         if bTraceLogs
           Debug.Trace(debugMsg)
         else
-          Debug.Notification(msg)
-    if !useTierSystem
-      int h = ModEvent.Create("SS_SetCold")
-      if h
-        ModEvent.PushInt(h, healthPenaltyPct)
-        ModEvent.PushInt(h, staminaPenaltyPct)
-        ModEvent.PushInt(h, magickaPenaltyPct)
-        ModEvent.PushInt(h, speedPenaltyPct)
-        ModEvent.Send(h)
-
-        if bDebugEnabled
-          String msg = "[SS] warm=" + warmth + " / req=" + baseRequirement + " + modifiers=" + modifierSum + " => " + safeReq + " | def=" + deficit + " | hpPen=" + healthPenaltyPct + "% spdPen=" + speedPenaltyPct + "%"
-          if bTraceLogs
-            Debug.Trace(msg)
-          else
-            Debug.Notification(msg)
-          endif
+          Debug.Notification(debugMsg)
         endif
+      endif
 
       if bTraceLogs
-        Debug.Trace("[SS] Sent SS_SetCold | hp=" + healthPenaltyPct + "% st=" + staminaPenaltyPct + "% mg=" + magickaPenaltyPct + "% speed=" + speedPenaltyPct + "% tier=" + preparednessTier)
-        if bTraceLogs
-          Debug.Trace("[SS] Sent SS_SetCold | hp=" + healthPenaltyPct + "% st=" + staminaPenaltyPct + "% mg=" + magickaPenaltyPct + "% speed=" + speedPenaltyPct + "%")
+        String traceMsg = "[SS] Sent SS_SetCold | hp=" + healthPenaltyPct + "% st=" + staminaPenaltyPct + "% mg=" + magickaPenaltyPct + "% speed=" + speedPenaltyPct + "%"
+        if tierPayload != -1
+          traceMsg = traceMsg + " tier=" + tierPayload
         endif
+        Debug.Trace(traceMsg)
       endif
 
       ; optional HP bleed (scaled by relative deficit)

@@ -29,9 +29,20 @@ Float appliedHealthBonus = 0.0
 Float appliedStaminaBonus = 0.0
 Float appliedMagickaBonus = 0.0
 
-Bool  damageLoopActive = False
+Bool  updateLoopActive = False
+Bool  tierDamageLoopActive = False
+Bool  linearDamageLoopActive = False
 Float activeDamagePerSecond = 0.0
 Float activeDamageFloorPercent = 0.0
+
+Float targetHealthRatio  = 1.0
+Float targetStaminaRatio = 1.0
+Float targetMagickaRatio = 1.0
+
+Int appliedHealthPenaltyPct  = 0
+Int appliedStaminaPenaltyPct = 0
+Int appliedMagickaPenaltyPct = 0
+Int appliedSpeedPenaltyPct   = 0
 
 Event OnEffectStart(Actor akTarget, Actor akCaster)
   PlayerRef = akTarget
@@ -91,18 +102,11 @@ Event OnColdEvent(Int healthPenaltyPct, Int staminaPenaltyPct, Int magickaPenalt
     return
   endif
 
-  Int tier = NormalizeTier(preparednessTier)
-  if tier == currentTier
-    return
+  if preparednessTier >= 0
+    HandleTierUpdate(preparednessTier)
+  else
+    HandleLinearPenalties(healthPenaltyPct, staminaPenaltyPct, magickaPenaltyPct, speedPenaltyPct)
   endif
-
-  if bTraceLogs
-    Debug.Trace("[SS] Driver: tier change " + currentTier + " -> " + tier)
-  endif
-
-  ClearTierEffects()
-  currentTier = tier
-  ApplyTierEffects(tier)
 EndEvent
 
 Event OnColdClear()
@@ -111,15 +115,6 @@ Event OnColdClear()
   endif
   ClearAll()
 EndEvent
-
-Function ClearAll()
-  if PlayerRef == None
-    return
-  endif
-
-  ClearTierEffects()
-  currentTier = -1
-EndFunction
 
 Function ClearTierEffects()
   if PlayerRef == None
@@ -274,48 +269,6 @@ Function ApplySpeedDelta(Float newDelta)
   endif
 EndFunction
 
-Function StartTierDamageLoop(Float damagePerSecond, Float floorPercent)
-  if PlayerRef == None
-    return
-  endif
-
-  activeDamagePerSecond = damagePerSecond
-  activeDamageFloorPercent = floorPercent
-
-  if activeDamagePerSecond <= 0.0
-    damageLoopActive = False
-    return
-  endif
-
-  damageLoopActive = True
-  RegisterForSingleUpdate(DamageTickInterval)
-EndFunction
-
-Function StopTierDamageLoop()
-  damageLoopActive = False
-  activeDamagePerSecond = 0.0
-  activeDamageFloorPercent = 0.0
-  UnregisterForUpdate()
-EndFunction
-
-Event OnUpdate()
-  if !damageLoopActive || PlayerRef == None
-    damageLoopActive = False
-    return
-  endif
-
-  if activeDamagePerSecond <= 0.0
-    damageLoopActive = False
-    return
-  endif
-
-  ProcessTierDamageTick()
-
-  if damageLoopActive
-    RegisterForSingleUpdate(DamageTickInterval)
-  endif
-EndEvent
-
 Function ProcessTierDamageTick()
   if PlayerRef == None
     return
@@ -386,59 +339,84 @@ Int Function NormalizeTier(Int tier)
     return 4
   endif
   return tier
-  useTierSystem = ReadUseTierSystemFlag()
-  if !useTierSystem
-    if bTraceLogs
-      Debug.Trace("[SS] Driver: tier change ignored (tier system disabled)")
-    endif
+EndFunction
+
+Function HandleTierUpdate(Int newTier)
+  ClearLinearEffects()
+  Int tier = NormalizeTier(newTier)
+  if tier == currentTier
     return
   endif
-
-  Int sanitizedTier = newTier
-  if sanitizedTier < -1
-    sanitizedTier = -1
-  elseif sanitizedTier > 4
-    sanitizedTier = 4
+  if bTraceLogs
+    Debug.Trace("[SS] Driver: tier change " + currentTier + " -> " + tier)
   endif
+  ClearTierEffects()
+  currentTier = tier
+  ApplyTierEffects(tier)
+EndFunction
 
-  currentTier = sanitizedTier
+Function HandleLinearPenalties(Int healthPenaltyPct, Int staminaPenaltyPct, Int magickaPenaltyPct, Int speedPenaltyPct)
+  ClearTierEffects()
+  ClearLinearEffects()
+  currentTier = -1
+
+  Int healthPenalty = SanitizePenalty(healthPenaltyPct, 80)
+  Int staminaPenalty = SanitizePenalty(staminaPenaltyPct, 80)
+  Int magickaPenalty = SanitizePenalty(magickaPenaltyPct, 80)
+  Int speedPenalty = SanitizePenalty(speedPenaltyPct, 50)
+
+  appliedHealthPenaltyPct = healthPenalty
+  appliedStaminaPenaltyPct = staminaPenalty
+  appliedMagickaPenaltyPct = magickaPenalty
+  appliedSpeedPenaltyPct = speedPenalty
+
+  targetHealthRatio = ComputeTargetRatio(healthPenalty)
+  targetStaminaRatio = ComputeTargetRatio(staminaPenalty)
+  targetMagickaRatio = ComputeTargetRatio(magickaPenalty)
+
+  ApplySpeedPenalty(speedPenalty)
+  ApplyRegenPenalty("HealRateMult", healthPenalty)
+  ApplyRegenPenalty("StaminaRateMult", staminaPenalty)
+  ApplyRegenPenalty("MagickaRateMult", magickaPenalty)
 
   if bTraceLogs
-    Debug.Trace("[SS] Driver: tier -> " + sanitizedTier + " (" + changeSource + ")")
+    Debug.Trace("[SS] Driver: linear penalties hp=" + healthPenalty + "% st=" + staminaPenalty + "% mg=" + magickaPenalty + "% spd=" + speedPenalty + "%")
   endif
 
-  if sanitizedTier != lastTier
-    ClearAll()
-    ApplyTierEffects(sanitizedTier)
-    lastTier = sanitizedTier
+  if NeedsLinearDamageLoop()
+    StartLinearDamageLoop()
   else
-    ApplyTierEffects(sanitizedTier)
+    StopLinearDamageLoop()
   endif
-EndEvent
+EndFunction
 
 Function ClearAll()
   if PlayerRef == None
-    ClearTierEffects()
     return
   endif
 
   ClearTierEffects()
+  ClearLinearEffects()
+  currentTier = -1
+EndFunction
+
+Function ClearLinearEffects()
+  if PlayerRef == None
+    return
+  endif
 
   ApplySpeedPenalty(0)
   targetHealthRatio  = 1.0
   targetStaminaRatio = 1.0
   targetMagickaRatio = 1.0
-
-  ApplyRegenPenalty("HealRateMult",    0)
-  ApplyRegenPenalty("StaminaRateMult", 0)
-  ApplyRegenPenalty("MagickaRateMult", 0)
-
   appliedHealthPenaltyPct  = 0
   appliedStaminaPenaltyPct = 0
   appliedMagickaPenaltyPct = 0
   appliedSpeedPenaltyPct   = 0
-
-  StopDamageLoop()
+  PlayerRef.SetActorValue("HealRateMult", 1.0)
+  PlayerRef.SetActorValue("StaminaRateMult", 1.0)
+  PlayerRef.SetActorValue("MagickaRateMult", 1.0)
+  StopLinearDamageLoop()
 EndFunction
 
 Function ApplySpeedPenalty(Int newPenaltyPct)
@@ -450,118 +428,6 @@ Function ApplySpeedPenalty(Int newPenaltyPct)
     PlayerRef.ModActorValue("SpeedMult", -delta)
     appliedSpeedPenaltyPct = newPenaltyPct
   endif
-EndFunction
-
-Function EnsureDamageLoop()
-  if !damageLoopActive
-    damageLoopActive = True
-    RegisterForSingleUpdate(DamageTickInterval)
-  endif
-EndFunction
-
-Function StopDamageLoop()
-  damageLoopActive = False
-  if !tierDamageLoopActive
-    UnregisterForUpdate()
-  endif
-EndFunction
-
-Bool Function NeedsDamageLoop()
-  if PlayerRef == None
-    return False
-  endif
-
-  if targetHealthRatio < 1.0 && IsStatAboveTarget("Health", targetHealthRatio)
-    return True
-  endif
-  if targetStaminaRatio < 1.0 && IsStatAboveTarget("Stamina", targetStaminaRatio)
-    return True
-  endif
-  if targetMagickaRatio < 1.0 && IsStatAboveTarget("Magicka", targetMagickaRatio)
-    return True
-  endif
-  return False
-EndFunction
-
-Bool Function IsStatAboveTarget(String avName, Float targetRatio)
-  if PlayerRef == None
-    return False
-  endif
-  if targetRatio >= 1.0
-    return False
-  endif
-  Float baseValue = PlayerRef.GetBaseActorValue(avName)
-  if baseValue <= 0.0
-    return False
-  endif
-  Float targetValue = baseValue * targetRatio
-  Float currentValue = PlayerRef.GetActorValue(avName)
-  return currentValue > targetValue + 0.25
-EndFunction
-
-Event OnUpdate()
-  if PlayerRef == None
-    damageLoopActive = False
-    StopTierDamageLoop()
-    return
-  endif
-
-  if useTierSystem
-    if tierDamageLoopActive
-      ; future tier DoT logic placeholder
-      RegisterForSingleUpdate(kTierDamageTickInterval)
-    endif
-    return
-  endif
-
-  Bool anyPenalty = targetHealthRatio < 1.0 || targetStaminaRatio < 1.0 || targetMagickaRatio < 1.0
-
-  ApplyDamageTowardsTarget("Health",  targetHealthRatio)
-  ApplyDamageTowardsTarget("Stamina", targetStaminaRatio)
-  ApplyDamageTowardsTarget("Magicka", targetMagickaRatio)
-
-  if anyPenalty
-    damageLoopActive = True
-    RegisterForSingleUpdate(DamageTickInterval)
-  else
-    StopDamageLoop()
-  endif
-EndEvent
-
-Bool Function ApplyDamageTowardsTarget(String avName, Float targetRatio)
-  if PlayerRef == None
-    return False
-  endif
-
-  if targetRatio >= 1.0
-    return False
-  endif
-
-  Float baseValue = PlayerRef.GetBaseActorValue(avName)
-  if baseValue <= 0.0
-    return False
-  endif
-
-  Float targetValue = baseValue * targetRatio
-  Float currentValue = PlayerRef.GetActorValue(avName)
-  Float epsilon = 0.25
-
-  if currentValue <= targetValue + epsilon
-    return False
-  endif
-
-  Float damagePerTick = DamagePerSecond * DamageTickInterval
-  Float excess = currentValue - targetValue
-  Float damage = damagePerTick
-  if damage > excess
-    damage = excess
-  endif
-  if damage <= 0.0
-    return False
-  endif
-
-  PlayerRef.DamageActorValue(avName, damage)
-  return True
 EndFunction
 
 Function ApplyRegenPenalty(String rateAV, Int penaltyPct)
@@ -578,6 +444,19 @@ Function ApplyRegenPenalty(String rateAV, Int penaltyPct)
   PlayerRef.SetActorValue(rateAV, mult)
 EndFunction
 
+Int Function SanitizePenalty(Int value, Int maxAllowed)
+  if value < 0
+    value = 0
+  endif
+  if value > maxAllowed
+    value = maxAllowed
+  endif
+  if value < 5
+    return 0
+  endif
+  return value
+EndFunction
+
 Float Function ComputeTargetRatio(Int penaltyPct)
   if penaltyPct <= 0
     return 1.0
@@ -589,64 +468,169 @@ Float Function ComputeTargetRatio(Int penaltyPct)
   return ratio
 EndFunction
 
-Int Function SanitizePenalty(Int value, Int maxAllowed)
-  if value < 5
-    return 0
-  endif
-  if value > maxAllowed
-    return maxAllowed
-  endif
-  if value < 0
-    return 0
-  endif
-  return value
-EndFunction
-
-Function ClearTierEffects()
-  Actor target = PlayerRef
-  if target != None
-    if tierSpeedDelta != 0.0
-      target.ModActorValue("SpeedMult", -tierSpeedDelta)
-    endif
-    if tierHealModified
-      target.SetActorValue("HealRateMult", 1.0)
-    endif
-    if tierStaminaModified
-      target.SetActorValue("StaminaRateMult", 1.0)
-    endif
-    if tierMagickaModified
-      target.SetActorValue("MagickaRateMult", 1.0)
-    endif
-  endif
-
-  tierSpeedDelta = 0.0
-  tierHealModified = False
-  tierStaminaModified = False
-  tierMagickaModified = False
-  tierHealRateMult = 1.0
-  tierStaminaRateMult = 1.0
-  tierMagickaRateMult = 1.0
-  StopTierDamageLoop()
-EndFunction
-
-Function ApplyTierEffects(Int tier)
-  ; Placeholder for tier-based penalties
-EndFunction
-
-Function StartTierDamageLoop()
-  if tierDamageLoopActive
+Function StartTierDamageLoop(Float damagePerSecond, Float floorPercent)
+  if PlayerRef == None
     return
   endif
-  if !useTierSystem
+
+  activeDamagePerSecond = damagePerSecond
+  activeDamageFloorPercent = floorPercent
+
+  if activeDamagePerSecond <= 0.0
+    tierDamageLoopActive = False
+    activeDamagePerSecond = 0.0
+    activeDamageFloorPercent = 0.0
+    StopUpdateLoopIfIdle()
     return
   endif
+
   tierDamageLoopActive = True
-  RegisterForSingleUpdate(kTierDamageTickInterval)
+  EnsureUpdateLoop()
 EndFunction
 
 Function StopTierDamageLoop()
   tierDamageLoopActive = False
-  if !damageLoopActive
+  activeDamagePerSecond = 0.0
+  activeDamageFloorPercent = 0.0
+  StopUpdateLoopIfIdle()
+EndFunction
+
+Function StartLinearDamageLoop()
+  linearDamageLoopActive = True
+  EnsureUpdateLoop()
+EndFunction
+
+Function StopLinearDamageLoop()
+  linearDamageLoopActive = False
+  StopUpdateLoopIfIdle()
+EndFunction
+
+Function EnsureUpdateLoop()
+  if !updateLoopActive
+    updateLoopActive = True
+    RegisterForSingleUpdate(DamageTickInterval)
+  endif
+EndFunction
+
+Function StopUpdateLoopIfIdle()
+  if !tierDamageLoopActive && !linearDamageLoopActive
+    updateLoopActive = False
     UnregisterForUpdate()
   endif
+EndFunction
+
+Event OnUpdate()
+  if PlayerRef == None
+    tierDamageLoopActive = False
+    linearDamageLoopActive = False
+    updateLoopActive = False
+    UnregisterForUpdate()
+    return
+  endif
+
+  if tierDamageLoopActive
+    ProcessTierDamageTick()
+  endif
+
+  if linearDamageLoopActive
+    ProcessLinearDamageTick()
+  endif
+
+  if tierDamageLoopActive || linearDamageLoopActive
+    RegisterForSingleUpdate(DamageTickInterval)
+  else
+    updateLoopActive = False
+  endif
+EndEvent
+
+Function ProcessLinearDamageTick()
+  if PlayerRef == None
+    StopLinearDamageLoop()
+    return
+  endif
+
+  if targetHealthRatio < 1.0
+    ApplyDamageTowardsTarget("Health", targetHealthRatio)
+  endif
+  if targetStaminaRatio < 1.0
+    ApplyDamageTowardsTarget("Stamina", targetStaminaRatio)
+  endif
+  if targetMagickaRatio < 1.0
+    ApplyDamageTowardsTarget("Magicka", targetMagickaRatio)
+  endif
+
+  if !NeedsLinearDamageLoop()
+    StopLinearDamageLoop()
+  endif
+EndFunction
+
+Bool Function NeedsLinearDamageLoop()
+  if PlayerRef == None
+    return False
+  endif
+  if targetHealthRatio < 1.0 && IsStatAboveTarget("Health", targetHealthRatio)
+    return True
+  endif
+  if targetStaminaRatio < 1.0 && IsStatAboveTarget("Stamina", targetStaminaRatio)
+    return True
+  endif
+  if targetMagickaRatio < 1.0 && IsStatAboveTarget("Magicka", targetMagickaRatio)
+    return True
+  endif
+  return False
+EndFunction
+
+Bool Function ApplyDamageTowardsTarget(String avName, Float targetRatio)
+  if PlayerRef == None
+    return False
+  endif
+  if targetRatio >= 1.0
+    return False
+  endif
+
+  Float baseValue = PlayerRef.GetBaseActorValue(avName)
+  if baseValue <= 0.0
+    return False
+  endif
+
+  Float targetValue = baseValue * targetRatio
+  Float currentValue = PlayerRef.GetActorValue(avName)
+  if currentValue <= targetValue
+    return False
+  endif
+
+  Float allowableDamage = currentValue - targetValue
+  if allowableDamage <= 0.0
+    return False
+  endif
+
+  Float damage = allowableDamage * 0.33
+  if damage < 1.0
+    damage = allowableDamage
+  endif
+
+  if damage <= 0.0
+    return False
+  endif
+
+  PlayerRef.DamageActorValue(avName, damage)
+  return True
+EndFunction
+
+Bool Function IsStatAboveTarget(String avName, Float targetRatio)
+  if PlayerRef == None
+    return False
+  endif
+  if targetRatio >= 1.0
+    return False
+  endif
+
+  Float baseValue = PlayerRef.GetBaseActorValue(avName)
+  if baseValue <= 0.0
+    return False
+  endif
+
+  Float targetValue = baseValue * targetRatio
+  Float currentValue = PlayerRef.GetActorValue(avName)
+  return currentValue > targetValue + 0.25
 EndFunction
