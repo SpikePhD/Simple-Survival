@@ -679,8 +679,13 @@ Function LoadFoodConsumptionConfig()
   endif
 
   Int entryLimit = 128
+  Int arraySize = configuredCount
+  if arraySize > entryLimit
+    arraySize = entryLimit
+  endif
+
   Bool hitLimit = False
-  extraFoodKeywords = new Keyword[128]
+  extraFoodKeywords = new Keyword[arraySize]
 
   Int i = 0
   while i < configuredCount
@@ -689,7 +694,7 @@ Function LoadFoodConsumptionConfig()
     Keyword keywordEntry = ResolveKeyword(keywordName)
 
     if keywordEntry != None
-      if extraFoodKeywordCount < entryLimit
+      if extraFoodKeywordCount < arraySize
         extraFoodKeywords[extraFoodKeywordCount] = keywordEntry
         extraFoodKeywordCount += 1
       else
@@ -701,7 +706,7 @@ Function LoadFoodConsumptionConfig()
     i += 1
   endwhile
 
-  if (!hitLimit && configuredCount > entryLimit) || hitLimit
+  if configuredCount > entryLimit || hitLimit
     TraceHunger("Extra food keyword list hit the Papyrus 128 entry limit, ignoring additional entries.")
   endif
 
