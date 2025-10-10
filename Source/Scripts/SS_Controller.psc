@@ -104,6 +104,42 @@ Int Property LastSpeedPenalty Hidden
   EndFunction
 EndProperty
 
+Int Property LastRegionClass Hidden
+  Int Function Get()
+    if WeatherModule != None
+      return WeatherModule.GetLastRegionClass()
+    endif
+    return -1
+  EndFunction
+EndProperty
+
+Int Property LastWeatherClass Hidden
+  Int Function Get()
+    if WeatherModule != None
+      return WeatherModule.GetLastWeatherClass()
+    endif
+    return -1
+  EndFunction
+EndProperty
+
+Bool Property LastInteriorState Hidden
+  Bool Function Get()
+    if WeatherModule != None
+      return WeatherModule.GetLastInteriorState()
+    endif
+    return False
+  EndFunction
+EndProperty
+
+Int Property LastPreparednessTier Hidden
+  Int Function Get()
+    if WeatherModule != None
+      return WeatherModule.GetLastPreparednessTier()
+    endif
+    return -1
+  EndFunction
+EndProperty
+
 Float Function GetLastWarmth()
   return LastWarmth
 EndFunction
@@ -114,6 +150,22 @@ EndFunction
 
 Float Function GetLastWeatherBonus()
   return LastWeatherBonus
+EndFunction
+
+Int Function GetLastRegionClass()
+  return LastRegionClass
+EndFunction
+
+Int Function GetLastWeatherClass()
+  return LastWeatherClass
+EndFunction
+
+Bool Function WasLastInterior()
+  return LastInteriorState
+EndFunction
+
+Int Function GetLastPreparednessTier()
+  return LastPreparednessTier
 EndFunction
 
 Function ConfigureWeatherModule(SS_Weather module)

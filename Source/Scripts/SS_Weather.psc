@@ -619,6 +619,22 @@ String Function GetCurrentWeatherToastMessage(Weather weatherForm)
   return "The weather is shifting."
 EndFunction
 
+Int Function GetLastRegionClass()
+  return lastRegionBucket
+EndFunction
+
+Int Function GetLastWeatherClass()
+  return lastWeatherClass
+EndFunction
+
+Bool Function GetLastInteriorState()
+  return lastInteriorState
+EndFunction
+
+Int Function GetLastPreparednessTier()
+  return lastPreparednessTier
+EndFunction
+
 Function DispatchToast(String label, String detail, String category)
   if Utility.IsInMenuMode()
     return
