@@ -40,12 +40,10 @@ Float kSlowTickH    = 0.40       ; 24 in-game minutes
 Float kColdDrainFrac = 0.05
 Float kColdFloorFrac = 0.20
 Float kMinRefreshGapSeconds = 0.3
-Float kToastCooldownSeconds = 1.0
 
 Bool  bRefreshQueued = False
 String queuedSource = ""
 Float lastEvaluateRealTime = 0.0
-Float lastToastRealTime = 0.0
 String lastToastMessage = ""
 String Property lastImmersionToast Auto
 String Property lastTierToast Auto
@@ -237,25 +235,26 @@ Function EvaluateWeather(String source = "Tick")
   ; ---- penalties mapping ----
   ; ---- apply or clear via driver ----
   if coldOn
-    int h = ModEvent.Create("SS_SetCold")
-    if h
-      ModEvent.PushInt(h, healthPenaltyPct)
-      ModEvent.PushInt(h, staminaPenaltyPct)
-      ModEvent.PushInt(h, magickaPenaltyPct)
-      ModEvent.PushInt(h, speedPenaltyPct)
-      ModEvent.Send(h)
+    int eventHandle = ModEvent.Create("SS_SetCold")
+    if eventHandle
+      ModEvent.PushInt(eventHandle, healthPenaltyPct)
+      ModEvent.PushInt(eventHandle, staminaPenaltyPct)
+      ModEvent.PushInt(eventHandle, magickaPenaltyPct)
+      ModEvent.PushInt(eventHandle, speedPenaltyPct)
+      ModEvent.PushInt(eventHandle, preparednessTier)
+      ModEvent.Send(eventHandle)
 
       if bDebugEnabled
-        String msg = "[SS] warm=" + warmth + " / req=" + baseRequirement + " + modifiers=" + modifierSum + " => " + safeReq + " | def=" + deficit + " | hpPen=" + healthPenaltyPct + "% spdPen=" + speedPenaltyPct + "%"
+        String debugMsg = "[SS] warm=" + warmth + " / req=" + baseRequirement + " + modifiers=" + modifierSum + " => " + safeReq + " | def=" + deficit + " | hpPen=" + healthPenaltyPct + "% spdPen=" + speedPenaltyPct + "%"
         if bTraceLogs
-          Debug.Trace(msg)
+          Debug.Trace(debugMsg)
         else
-          Debug.Notification(msg)
+          Debug.Notification(debugMsg)
         endif
       endif
 
       if bTraceLogs
-        Debug.Trace("[SS] Sent SS_SetCold | hp=" + healthPenaltyPct + "% st=" + staminaPenaltyPct + "% mg=" + magickaPenaltyPct + "% speed=" + speedPenaltyPct + "%")
+        Debug.Trace("[SS] Sent SS_SetCold | hp=" + healthPenaltyPct + "% st=" + staminaPenaltyPct + "% mg=" + magickaPenaltyPct + "% speed=" + speedPenaltyPct + "% tier=" + preparednessTier)
       endif
     endif
 
@@ -271,9 +270,9 @@ Function EvaluateWeather(String source = "Tick")
 
     ; Cold resource drain disabled for linear penalty testing
   else
-    int h2 = ModEvent.Create("SS_ClearCold")
-    if h2
-      ModEvent.Send(h2)
+    int clearHandle = ModEvent.Create("SS_ClearCold")
+    if clearHandle
+      ModEvent.Send(clearHandle)
       if bDebugEnabled
         Debug.Notification("[SS] cold OFF -> clear penalties")
       endif
@@ -666,16 +665,10 @@ Function DispatchToast(String label, String detail, String category)
     return
   endif
 
-  Float now = Utility.GetCurrentRealTime()
-  Float elapsed = now - lastToastRealTime
-
   if toastMessage == lastToastMessage
-    if elapsed >= 0.0 && elapsed < kToastCooldownSeconds
-      return
-    endif
+    return
   endif
 
-  lastToastRealTime = now
   lastToastMessage = toastMessage
 
   Debug.Notification(toastMessage)
