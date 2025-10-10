@@ -250,6 +250,21 @@ Function ConfigureHungerModule(SS_Hunger module)
   endif
 EndFunction
 
+Function NotifyFoodConsumed(AlchemyItem foodItem)
+  if foodItem == None
+    return
+  endif
+
+  if HungerModule == None
+    InitializeHungerModule()
+    if HungerModule == None
+      return
+    endif
+  endif
+
+  HungerModule.HandleFoodConsumed(foodItem)
+EndFunction
+
 Function ApplyDebugFlags()
   if WeatherModule != None
     WeatherModule.ApplyDebugFlags()

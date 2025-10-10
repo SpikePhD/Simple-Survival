@@ -30,6 +30,14 @@ Bool isSleepingState = False
 Bool hourlyUpdateArmed = False
 Bool suppressHungerTierToasts = False
 
+Keyword baseFoodKeyword
+Keyword rawFoodKeyword
+Keyword[] extraFoodKeywords
+Float rawFoodFactor = 0.10
+Int[] foodValueBandMins
+Int[] foodValueBandMaxes
+Int[] foodValueBandPoints
+
 Event OnInit()
   InitializeModule()
 EndEvent
@@ -82,6 +90,36 @@ Function EnsureInitialized()
   if !bInitialized
     InitializeModule()
   endif
+EndFunction
+
+Function HandleFoodConsumed(AlchemyItem foodItem)
+  EnsureInitialized()
+
+  if !HungerEnabled
+    return
+  endif
+
+  if foodItem == None
+    return
+  endif
+
+  if !IsFoodItem(foodItem)
+    return
+  endif
+
+  Bool rawState = IsRawFood(foodItem)
+  Int restorePoints = ResolveFoodRestorePoints(foodItem, rawState)
+  if restorePoints <= 0
+    return
+  endif
+
+  Float nowTime = Utility.GetCurrentGameTime()
+  Float newValue = lastHungerValue + restorePoints
+  SetHungerValue(newValue, nowTime)
+  lastDecayCheckGameTime = nowTime
+  SaveHungerState()
+
+  DispatchFoodToast(restorePoints, rawState)
 EndFunction
 
 Function ApplyHungerDecay(Float hoursElapsed, Bool isSleeping, Float currentGameTime)
@@ -280,6 +318,28 @@ Function DispatchHungerImmersionToast(String detail)
   Debug.Notification(detail)
 
   lastTierToast_Hunger = detail
+EndFunction
+
+Function DispatchFoodToast(Int restorePoints, Bool isRawFood)
+  if restorePoints <= 0
+    return
+  endif
+
+  if !IsImmersionToastsEnabled()
+    return
+  endif
+
+  if Utility.IsInMenuMode()
+    return
+  endif
+
+  String pointsText = Utility.ToString(restorePoints)
+  String message = "That hit the spot. (+" + pointsText + ")"
+  if isRawFood
+    message = "Raw food barely helps. (+" + pointsText + ")"
+  endif
+
+  Debug.Notification(message)
 EndFunction
 
 String Function GetHungerTierToastMessage(Int tier)
@@ -574,6 +634,64 @@ Function LoadHungerConfig()
   HungerTier3Min = ClampInt(JsonUtil.GetPathIntValue(CFG_PATH, "hunger.tiers.t3_min", 50), 0, 100)
   HungerTier2Min = ClampInt(JsonUtil.GetPathIntValue(CFG_PATH, "hunger.tiers.t2_min", 25), 0, 100)
   HungerTier1Min = ClampInt(JsonUtil.GetPathIntValue(CFG_PATH, "hunger.tiers.t1_min", 10), 0, 100)
+
+  LoadFoodConsumptionConfig()
+EndFunction
+
+Function LoadFoodConsumptionConfig()
+  baseFoodKeyword = ResolveKeyword("VendorItemFood")
+
+  String rawKeywordName = JsonUtil.GetPathStringValue(CFG_PATH, "hunger.food.rawKeyword", "")
+  rawFoodKeyword = ResolveKeyword(rawKeywordName)
+
+  rawFoodFactor = JsonUtil.GetPathFloatValue(CFG_PATH, "hunger.food.rawFactor", 0.10)
+  if rawFoodFactor < 0.0
+    rawFoodFactor = 0.0
+  endif
+
+  Int extraCount = JsonUtil.PathCount(CFG_PATH, "hunger.food.extraKeywords")
+  if extraCount < 0
+    extraCount = 0
+  endif
+
+  extraFoodKeywords = new Keyword[extraCount]
+
+  Int i = 0
+  while i < extraCount
+    String basePath = "hunger.food.extraKeywords[" + Utility.ToString(i) + "]"
+    String keywordName = JsonUtil.GetPathStringValue(CFG_PATH, basePath, "")
+    extraFoodKeywords[i] = ResolveKeyword(keywordName)
+    i += 1
+  endwhile
+
+  LoadFoodValueBands()
+EndFunction
+
+Function LoadFoodValueBands()
+  Int bandCount = JsonUtil.PathCount(CFG_PATH, "hunger.food.valueBands")
+  if bandCount < 0
+    bandCount = 0
+  endif
+
+  if bandCount <= 0
+    foodValueBandMins = None
+    foodValueBandMaxes = None
+    foodValueBandPoints = None
+    return
+  endif
+
+  foodValueBandMins = Utility.CreateIntArray(bandCount)
+  foodValueBandMaxes = Utility.CreateIntArray(bandCount)
+  foodValueBandPoints = Utility.CreateIntArray(bandCount)
+
+  Int i = 0
+  while i < bandCount
+    String basePath = "hunger.food.valueBands[" + Utility.ToString(i) + "]"
+    foodValueBandMins[i] = JsonUtil.GetPathIntValue(CFG_PATH, basePath + ".min", 0)
+    foodValueBandMaxes[i] = JsonUtil.GetPathIntValue(CFG_PATH, basePath + ".max", 0)
+    foodValueBandPoints[i] = JsonUtil.GetPathIntValue(CFG_PATH, basePath + ".points", 0)
+    i += 1
+  endwhile
 EndFunction
 
 Function LoadHungerState()
@@ -632,6 +750,98 @@ EndFunction
 Int Function GetLastHungerTier()
   EnsureInitialized()
   return lastHungerTier
+EndFunction
+
+Bool Function IsFoodItem(AlchemyItem foodItem)
+  if foodItem == None
+    return False
+  endif
+
+  if baseFoodKeyword != None && foodItem.HasKeyword(baseFoodKeyword)
+    return True
+  endif
+
+  if rawFoodKeyword != None && foodItem.HasKeyword(rawFoodKeyword)
+    return True
+  endif
+
+  if extraFoodKeywords != None
+    Int count = extraFoodKeywords.Length
+    Int i = 0
+    while i < count
+      Keyword keywordEntry = extraFoodKeywords[i]
+      if keywordEntry != None && foodItem.HasKeyword(keywordEntry)
+        return True
+      endif
+      i += 1
+    endwhile
+  endif
+
+  return False
+EndFunction
+
+Bool Function IsRawFood(AlchemyItem foodItem)
+  if rawFoodKeyword == None || foodItem == None
+    return False
+  endif
+
+  return foodItem.HasKeyword(rawFoodKeyword)
+EndFunction
+
+Int Function ResolveFoodRestorePoints(AlchemyItem foodItem, Bool isRawFood)
+  if foodItem == None
+    return 0
+  endif
+
+  Int basePoints = DetermineFoodPointsForValue(foodItem.GetGoldValue())
+  if basePoints <= 0
+    return 0
+  endif
+
+  if isRawFood
+    if rawFoodFactor <= 0.0
+      return 0
+    endif
+
+    Float scaled = basePoints * rawFoodFactor
+    Int adjusted = scaled as Int
+    if adjusted < 0
+      adjusted = 0
+    endif
+    return adjusted
+  endif
+
+  return basePoints
+EndFunction
+
+Int Function DetermineFoodPointsForValue(Int goldValue)
+  if foodValueBandPoints == None
+    return 0
+  endif
+
+  Int count = foodValueBandPoints.Length
+  Int i = 0
+  while i < count
+    if goldValue >= foodValueBandMins[i] && goldValue <= foodValueBandMaxes[i]
+      return foodValueBandPoints[i]
+    endif
+    i += 1
+  endwhile
+
+  return 0
+EndFunction
+
+Keyword Function ResolveKeyword(String keywordName)
+  if keywordName == None
+    return None
+  endif
+
+  if keywordName == ""
+    return None
+  endif
+
+  Keyword resolved = Keyword.GetKeyword(keywordName)
+  return resolved
 EndFunction
 
 Int Function ClampInt(Int value, Int minValue, Int maxValue)

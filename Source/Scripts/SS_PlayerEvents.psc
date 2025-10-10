@@ -64,6 +64,28 @@ Event OnPlayerLoadGame()
   RegisterForSingleUpdate(0.5)
 EndEvent
 
+Event OnObjectEquipped(Form akBaseObject, ObjectReference akRef)
+  if akBaseObject == None
+    return
+  endif
+
+  if akRef != GetReference()
+    return
+  endif
+
+  AlchemyItem foodItem = akBaseObject as AlchemyItem
+  if foodItem == None
+    return
+  endif
+
+  SS_Controller controller = ResolveController()
+  if controller == None
+    return
+  endif
+
+  controller.NotifyFoodConsumed(foodItem)
+EndEvent
+
 Event OnUpdate()
   SS_Controller controller = ResolveController()
   Bool isSwimming = ResolveCurrentSwimmingState()
