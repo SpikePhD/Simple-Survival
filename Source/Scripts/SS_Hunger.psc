@@ -152,6 +152,7 @@ Function SetHungerValue(Float newValue, Float currentGameTime = -1.0)
   Int resolvedTier = DetermineHungerTier(lastHungerValue)
 
   if resolvedTier != previousTier
+    SendHungerTierEvent(resolvedTier)
     HandleHungerTierChanged(resolvedTier, previousTier)
   endif
 
@@ -257,6 +258,14 @@ Function HandleHungerTierChanged(Int newTier, Int previousTier)
   endif
 
   DispatchHungerImmersionToast(toastMessage)
+EndFunction
+
+Function SendHungerTierEvent(Int tier)
+  int evt = ModEvent.Create("SS_HungerTierChanged")
+  if evt
+    ModEvent.PushInt(evt, tier)
+    ModEvent.Send(evt)
+  endif
 EndFunction
 
 Function DispatchHungerImmersionToast(String detail)
