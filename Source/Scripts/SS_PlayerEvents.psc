@@ -73,7 +73,7 @@ Event OnObjectEquipped(Form akBaseObject, ObjectReference akRef)
     return
   endif
 
-  AlchemyItem foodItem = akBaseObject as AlchemyItem
+  Potion foodItem = akBaseObject as Potion
   if foodItem == None
     return
   endif
