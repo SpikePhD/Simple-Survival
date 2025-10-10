@@ -204,7 +204,6 @@ Function EvaluateWeather(String source = "Tick")
   Bool forecastChanged = (regionClass != lastRegionBucket)
   Bool weatherChanged = (currentWeather != lastWeatherForm) || (weatherClass != lastWeatherClass)
 
-  Bool debugToastsEnabled = IsDebugToastsEnabled()
   Bool immersionToastsEnabled = IsImmersionToastsEnabled()
 
   ; ---- warmth/deficit from gear ----
@@ -287,40 +286,8 @@ Function EvaluateWeather(String source = "Tick")
   endif
 
   Bool sourceIsFastTravel = SourceIncludes(source, "FastTravelEnd")
-  Bool locationSource = sourceIsFastTravel || SourceIncludes(source, "LocationChange") || SourceIncludes(source, "CellAttach") || SourceIncludes(source, "CellDetach")
   Bool locationChanged = (newLocationName != oldLocationName) || (newWorldspaceName != oldWorldspaceName)
   Bool interiorChanged = isInterior != oldInterior
-
-  if debugToastsEnabled
-    if sourceIsFastTravel
-      String fromLabel = FormatLocationLabel(pendingFastTravelOriginLocation, pendingFastTravelOriginWorldspace)
-      Bool originInterior = pendingFastTravelOriginInterior
-      if fromLabel == "Unknown"
-        fromLabel = FormatLocationLabel(oldLocationName, oldWorldspaceName)
-        originInterior = oldInterior
-      endif
-      String destLabel = FormatLocationLabel(newLocationName, newWorldspaceName)
-      String fromDetail = fromLabel + " (" + FormatInteriorState(originInterior) + ")"
-      String destDetail = destLabel + " (" + FormatInteriorState(isInterior) + ")"
-      DispatchToast("Debug Fast Travel:", "From " + fromDetail + " -> " + destDetail, "Debug")
-    elseif locationSource && (locationChanged || interiorChanged)
-      if oldLocationName != "" || oldWorldspaceName != ""
-        String locFrom = FormatLocationLabel(oldLocationName, oldWorldspaceName)
-        String locTo = FormatLocationLabel(newLocationName, newWorldspaceName)
-        DispatchToast("Debug Location:", locFrom + " -> " + locTo + " (" + FormatInteriorState(isInterior) + ")", "Debug")
-      endif
-    endif
-
-    if weatherChanged
-      String prevWeatherName = FormatWeatherName(previousWeather)
-      String newWeatherName = FormatWeatherName(currentWeather)
-      DispatchToast("Debug Weather:", prevWeatherName + " -> " + newWeatherName, "Debug")
-    endif
-
-    if preparednessTier != lastPreparednessTier && lastPreparednessTier >= 0
-      DispatchToast("Debug Preparedness:", "Tier " + lastPreparednessTier + " -> Tier " + preparednessTier, "Debug")
-    endif
-  endif
 
   if immersionToastsEnabled
     Bool isTriggerSource = True
@@ -355,6 +322,11 @@ Function EvaluateWeather(String source = "Tick")
 
       if combinedMessage != ""
         DispatchToast("", combinedMessage, "Immersion")
+      endif
+
+      String comfortMsg = GetPreparednessToastMessage(preparednessTier)
+      if comfortMsg != ""
+        DispatchToast("", comfortMsg, "Immersion")
       endif
     endif
   endif
