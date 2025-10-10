@@ -1,9 +1,11 @@
 Scriptname SS_Controller extends Quest
 
 Quest Property WeatherQuest Auto
+Quest Property HungerQuest Auto
 Spell Property SS_PlayerAbility Auto
 
 SS_Weather WeatherModule
+SS_Hunger HungerModule
 Bool bInitialized = False
 
 Event OnInit()
@@ -11,6 +13,7 @@ Event OnInit()
   if WeatherModule != None
     WeatherModule.ConfigureModule(SS_PlayerAbility)
   endif
+  InitializeHungerModule()
   bInitialized = True
 EndEvent
 
@@ -19,6 +22,7 @@ Event OnPlayerLoadGame()
   if WeatherModule != None
     WeatherModule.ConfigureModule(SS_PlayerAbility)
   endif
+  InitializeHungerModule()
 EndEvent
 
 Function InitializeWeatherModule()
@@ -140,6 +144,54 @@ Int Property LastPreparednessTier Hidden
   EndFunction
 EndProperty
 
+Int Property LastHungerValue Hidden
+  Int Function Get()
+    if HungerModule == None
+      InitializeHungerModule()
+      if HungerModule == None
+        return 0
+      endif
+    endif
+    return HungerModule.GetLastHungerValue()
+  EndFunction
+EndProperty
+
+Float Property LastHungerHit100Time Hidden
+  Float Function Get()
+    if HungerModule == None
+      InitializeHungerModule()
+      if HungerModule == None
+        return 0.0
+      endif
+    endif
+    return HungerModule.GetLastHit100GameTime()
+  EndFunction
+EndProperty
+
+Float Property LastHungerDecayCheck Hidden
+  Float Function Get()
+    if HungerModule == None
+      InitializeHungerModule()
+      if HungerModule == None
+        return 0.0
+      endif
+    endif
+    return HungerModule.GetLastDecayCheckGameTime()
+  EndFunction
+EndProperty
+
+Int Property LastHungerTierValue Hidden
+  Int Function Get()
+    if HungerModule == None
+      InitializeHungerModule()
+      if HungerModule == None
+        return 0
+      endif
+    endif
+    return HungerModule.GetLastHungerTier()
+  EndFunction
+EndProperty
+
 Float Function GetLastWarmth()
   return LastWarmth
 EndFunction
@@ -150,6 +202,22 @@ EndFunction
 
 Float Function GetLastWeatherBonus()
   return LastWeatherBonus
+EndFunction
+
+Function InitializeHungerModule()
+  if HungerQuest == None
+    HungerQuest = Self
+  endif
+
+  if HungerQuest != None
+    HungerModule = HungerQuest as SS_Hunger
+  else
+    HungerModule = None
+  endif
+
+  if HungerModule != None
+    HungerModule.InitializeModule()
+  endif
 EndFunction
 
 Int Function GetLastRegionClass()
@@ -175,6 +243,13 @@ Function ConfigureWeatherModule(SS_Weather module)
   endif
 EndFunction
 
+Function ConfigureHungerModule(SS_Hunger module)
+  HungerModule = module
+  if HungerModule != None
+    HungerModule.InitializeModule()
+  endif
+EndFunction
+
 Function ApplyDebugFlags()
   if WeatherModule != None
     WeatherModule.ApplyDebugFlags()
@@ -182,6 +257,14 @@ Function ApplyDebugFlags()
 EndFunction
 
 Function RequestRefresh(String source = "RequestRefresh")
+  if HungerModule == None
+    InitializeHungerModule()
+  endif
+
+  if HungerModule != None
+    HungerModule.UpdateFromGameTime(False)
+  endif
+
   if WeatherModule != None
     WeatherModule.RequestFastTick(source)
   endif
@@ -194,6 +277,13 @@ Function NotifyFastTravelOrigin()
 EndFunction
 
 Function NotifySleepComplete(Float hoursSlept)
-  ; placeholder for future hunger/fatigue integration
+  if HungerModule == None
+    InitializeHungerModule()
+  endif
+
+  if HungerModule != None
+    HungerModule.UpdateFromGameTime(True)
+  endif
+
   RequestRefresh("SleepComplete")
 EndFunction
