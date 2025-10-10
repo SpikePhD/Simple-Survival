@@ -288,6 +288,7 @@ Function EvaluateWeather(String source = "Tick")
   Bool sourceIsFastTravel = SourceIncludes(source, "FastTravelEnd")
   Bool locationChanged = (newLocationName != oldLocationName) || (newWorldspaceName != oldWorldspaceName)
   Bool interiorChanged = isInterior != oldInterior
+  Bool exitedToExterior = interiorChanged && !isInterior
 
   if immersionToastsEnabled
     Bool isTriggerSource = True
@@ -298,12 +299,12 @@ Function EvaluateWeather(String source = "Tick")
     endif
 
     if !isTriggerSource
-      if forecastChanged || weatherChanged || locationChanged || interiorChanged || sourceIsFastTravel
+      if forecastChanged || weatherChanged || locationChanged || exitedToExterior || sourceIsFastTravel
         isTriggerSource = True
       endif
     endif
 
-    if isTriggerSource
+    if isTriggerSource && !isInterior
       String forecastMessage = GetForecastToastMessage(regionClass)
       String weatherMessage = GetCurrentWeatherToastMessage(currentWeather)
       String combinedMessage = ""
