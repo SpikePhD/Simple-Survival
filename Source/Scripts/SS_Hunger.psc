@@ -416,10 +416,7 @@ EndFunction
 
 Function LoadHungerState()
   Float nowTime = Utility.GetCurrentGameTime()
-  Int storedValue = GetStoredInt(HungerKeyLastValue, -1)
-  if storedValue < 0
-    storedValue = HungerStartValue
-  endif
+  Int storedValue = GetStoredInt(HungerKeyLastValue, HungerStartValue)
   storedValue = ClampInt(storedValue, 0, HungerMaxValue)
 
   lastHit100GameTime = GetStoredFloat(HungerKeyLastHit100, 0.0)
@@ -495,3 +492,4 @@ Float Function GetStoredFloat(String storageKey, Float fallback)
   endif
   return fallback
 EndFunction
+
