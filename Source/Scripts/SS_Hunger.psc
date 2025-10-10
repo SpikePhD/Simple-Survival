@@ -679,7 +679,7 @@ Function LoadFoodConsumptionConfig()
   extraFoodKeywordCount = 0
 
   while i < configuredCount && extraFoodKeywordCount < entryLimit
-    String basePath = "hunger.food.extraKeywords[" + IntToString(i) + "]"
+    String basePath = "hunger.food.extraKeywords[" + Utility.ToString(i) + "]"
     String keywordName = JsonUtil.GetPathStringValue(CFG_PATH, basePath, "")
     Keyword keywordEntry = ResolveKeyword(keywordName)
 
@@ -688,16 +688,9 @@ Function LoadFoodConsumptionConfig()
         extraFoodKeywords = new Keyword[1]
         extraFoodKeywords[0] = keywordEntry
       else
-        Int existingCount = extraFoodKeywords.Length
-        Keyword[] expanded = new Keyword[existingCount + 1]
-        Int copyIndex = 0
-        while copyIndex < existingCount
-          expanded[copyIndex] = extraFoodKeywords[copyIndex]
-          copyIndex += 1
-        endwhile
-        expanded[existingCount] = keywordEntry
-        extraFoodKeywords = expanded
+        extraFoodKeywords = extraFoodKeywords + keywordEntry
       endif
+
       extraFoodKeywordCount = extraFoodKeywords.Length
     endif
 
