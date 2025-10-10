@@ -828,12 +828,35 @@ Float Function GetPlayerWarmthScoreV1(Actor p, Float perPiece)
   total += ComputePieceWarmth(p, 0x00000008, kBaseWarmthHands)
   total += ComputePieceWarmth(p, 0x00000080, kBaseWarmthFeet)
   total += ComputePieceWarmth(p, 0x00010000, kBaseWarmthCloak)
+  total += GetTorchWarmthBonus(p)
 
   if perPiece > 0.0 && perPiece != 100.0
     total *= (perPiece / 100.0)
   endif
 
   return total
+EndFunction
+
+Float Function GetTorchWarmthBonus(Actor wearer)
+  if wearer == None
+    return 0.0
+  endif
+
+  Float torchBonus = GetF("weather.cold.torchWarmthBonus", 0.0)
+  if torchBonus <= 0.0
+    return 0.0
+  endif
+
+  Light equippedLight = wearer.GetEquippedObject(True) as Light
+  if equippedLight == None
+    equippedLight = wearer.GetEquippedObject(False) as Light
+  endif
+
+  if equippedLight != None
+    return torchBonus
+  endif
+
+  return 0.0
 EndFunction
 
 Armor Function GetHeadGear(Actor wearer)
@@ -1036,6 +1059,11 @@ Function InitConfigDefaults()
   f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.autoWarmthPerPiece", -9999.0)
   if f == -9999.0
     JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.autoWarmthPerPiece", 100.0)
+  endif
+
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.torchWarmthBonus", -9999.0)
+  if f == -9999.0
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.torchWarmthBonus", 30.0)
   endif
 
   ; additive weather modifiers
