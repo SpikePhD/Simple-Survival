@@ -101,7 +101,7 @@ Function EnsureInitialized()
   endif
 EndFunction
 
-Function HandleFoodConsumed(AlchemyItem foodItem)
+Function HandleFoodConsumed(Potion foodItem)
   EnsureInitialized()
 
   if !HungerEnabled
@@ -670,15 +670,39 @@ Function LoadFoodConsumptionConfig()
     extraCount = 0
   endif
 
-  extraFoodKeywords = new Keyword[extraCount]
+  if extraCount <= 0
+    extraFoodKeywords = None
+    return
+  endif
+
+  extraFoodKeywords = None
 
   Int i = 0
   while i < extraCount
+    if extraFoodKeywords != None && extraFoodKeywords.Length >= 128
+      TraceHunger("Extra food keyword list hit the Papyrus 128 entry limit, ignoring additional entries.")
+      break
+    endif
+
     String basePath = "hunger.food.extraKeywords[" + Utility.ToString(i) + "]"
     String keywordName = JsonUtil.GetPathStringValue(CFG_PATH, basePath, "")
-    extraFoodKeywords[i] = ResolveKeyword(keywordName)
+    Keyword keywordEntry = ResolveKeyword(keywordName)
+
+    if keywordEntry != None
+      if extraFoodKeywords == None
+        extraFoodKeywords = new Keyword[1]
+        extraFoodKeywords[0] = keywordEntry
+      else
+        extraFoodKeywords = extraFoodKeywords + keywordEntry
+      endif
+    endif
+
     i += 1
   endwhile
+
+  if extraFoodKeywords != None && extraFoodKeywords.Length <= 0
+    extraFoodKeywords = None
+  endif
 
   LoadFoodValueBands()
 EndFunction
@@ -768,7 +792,7 @@ Int Function GetLastHungerTier()
   return lastHungerTier
 EndFunction
 
-Bool Function IsFoodItem(AlchemyItem foodItem)
+Bool Function IsFoodItem(Potion foodItem)
   if foodItem == None
     return False
   endif
@@ -796,7 +820,7 @@ Bool Function IsFoodItem(AlchemyItem foodItem)
   return False
 EndFunction
 
-Bool Function IsRawFood(AlchemyItem foodItem)
+Bool Function IsRawFood(Potion foodItem)
   if rawFoodKeyword == None || foodItem == None
     return False
   endif
@@ -804,7 +828,7 @@ Bool Function IsRawFood(AlchemyItem foodItem)
   return foodItem.HasKeyword(rawFoodKeyword)
 EndFunction
 
-Int Function ResolveFoodRestorePoints(AlchemyItem foodItem, Bool isRawFood)
+Int Function ResolveFoodRestorePoints(Potion foodItem, Bool isRawFood)
   if foodItem == None
     return 0
   endif
@@ -922,7 +946,7 @@ Function TraceHungerTier(Int tier)
   TraceHunger("tier -> " + Utility.ToString(tier))
 EndFunction
 
-Function TraceFoodConsumed(AlchemyItem foodItem, Int restorePoints)
+Function TraceFoodConsumed(Potion foodItem, Int restorePoints)
   if !bTraceLogs
     return
   endif

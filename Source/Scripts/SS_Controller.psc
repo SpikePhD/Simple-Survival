@@ -206,13 +206,12 @@ EndFunction
 
 Function InitializeHungerModule()
   if HungerQuest == None
-    HungerQuest = Self
+    HungerModule = None
+    return
   endif
 
-  if HungerQuest != None
+  if HungerModule == None
     HungerModule = HungerQuest as SS_Hunger
-  else
-    HungerModule = None
   endif
 
   if HungerModule != None
@@ -250,7 +249,7 @@ Function ConfigureHungerModule(SS_Hunger module)
   endif
 EndFunction
 
-Function NotifyFoodConsumed(AlchemyItem foodItem)
+Function NotifyFoodConsumed(Potion foodItem)
   if foodItem == None
     return
   endif
