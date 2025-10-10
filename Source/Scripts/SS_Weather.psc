@@ -250,6 +250,21 @@ Function EvaluateWeather(String source = "Tick")
   ; ---- penalties mapping ----
   ; ---- apply or clear via driver ----
   if coldOn
+    int h = ModEvent.Create("SS_SetCold")
+    if h
+      ModEvent.PushInt(h, healthPenaltyPct)
+      ModEvent.PushInt(h, staminaPenaltyPct)
+      ModEvent.PushInt(h, magickaPenaltyPct)
+      ModEvent.PushInt(h, speedPenaltyPct)
+      ModEvent.PushInt(h, preparednessTier)
+      ModEvent.Send(h)
+
+      if bDebugEnabled
+        String msg = "[SS] warm=" + warmth + " / req=" + baseRequirement + " + modifiers=" + modifierSum + " => " + safeReq + " | def=" + deficit + " | hpPen=" + healthPenaltyPct + "% spdPen=" + speedPenaltyPct + "%"
+        if bTraceLogs
+          Debug.Trace(msg)
+        else
+          Debug.Notification(msg)
     if !useTierSystem
       int h = ModEvent.Create("SS_SetCold")
       if h
@@ -268,6 +283,8 @@ Function EvaluateWeather(String source = "Tick")
           endif
         endif
 
+      if bTraceLogs
+        Debug.Trace("[SS] Sent SS_SetCold | hp=" + healthPenaltyPct + "% st=" + staminaPenaltyPct + "% mg=" + magickaPenaltyPct + "% speed=" + speedPenaltyPct + "% tier=" + preparednessTier)
         if bTraceLogs
           Debug.Trace("[SS] Sent SS_SetCold | hp=" + healthPenaltyPct + "% st=" + staminaPenaltyPct + "% mg=" + magickaPenaltyPct + "% speed=" + speedPenaltyPct + "%")
         endif
