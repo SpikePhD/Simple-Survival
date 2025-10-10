@@ -43,76 +43,12 @@ Event OnEffectStart(Actor akTarget, Actor akCaster)
   endif
 EndEvent
 
-Scriptname SS_AbilityDriver extends ActiveMagicEffect
-
-Import JsonUtil
-
-; ---- Config / Debug ----
-String Property CFG_PATH = "Data\\SKSE\\Plugins\\SS\\config.json" Auto
-Float Property DamagePerSecond = 5.0 Auto
-Float Property DamageTickInterval = 1.0 Auto
-Bool bTraceLogs = False
-Bool useTierSystem = False
-
-; ---- Penalty tracking ----
-Int   appliedHealthPenaltyPct  = 0
-Int   appliedStaminaPenaltyPct = 0
-Int   appliedMagickaPenaltyPct = 0
-Int   appliedSpeedPenaltyPct   = 0
-
-Float targetHealthRatio  = 1.0
-Float targetStaminaRatio = 1.0
-Float targetMagickaRatio = 1.0
-
-Bool  damageLoopActive = False
-Bool  tierDamageLoopActive = False
-Float tierSpeedDelta = 0.0
-Bool  tierHealModified = False
-Bool  tierStaminaModified = False
-Bool  tierMagickaModified = False
-Float tierHealRateMult = 1.0
-Float tierStaminaRateMult = 1.0
-Float tierMagickaRateMult = 1.0
-Int   currentTier = -1
-Int   lastTier = -1
-Float kTierDamageTickInterval = 1.0
-
-Actor PlayerRef
-
-Event OnEffectStart(Actor akTarget, Actor akCaster)
-  PlayerRef = akTarget
-  ApplyDebug()
-  useTierSystem = ReadUseTierSystemFlag()
-  damageLoopActive = False
-  tierDamageLoopActive = False
-  tierSpeedDelta = 0.0
-  tierHealModified = False
-  tierStaminaModified = False
-  tierMagickaModified = False
-  tierHealRateMult = 1.0
-  tierStaminaRateMult = 1.0
-  tierMagickaRateMult = 1.0
-  currentTier = -1
-  lastTier = -1
-  RegisterForModEvent("SS_SetCold", "OnColdEvent")
-  RegisterForModEvent("SS_ClearCold", "OnColdClear")
-  RegisterForModEvent("SS_TierChanged", "OnTierChanged")
-  if bTraceLogs
-    Debug.Trace("[SS] Driver OnEffectStart: registered for SS_SetCold / SS_ClearCold / SS_TierChanged | tierFlag=" + useTierSystem)
-  endif
-EndEvent
-
 Event OnEffectFinish(Actor akTarget, Actor akCaster)
   ClearAll()
   UnregisterForAllModEvents()
   if bTraceLogs
     Debug.Trace("[SS] AbilityDriver: finish & cleared")
   endif
-  PlayerRef = None
-EndEvent
-
-  currentTier = -1
-  lastTier = -1
   PlayerRef = None
 EndEvent
 
@@ -133,18 +69,6 @@ Event OnObjectEquipped(Form akBaseObject, ObjectReference akRef)
     if bTraceLogs
       Debug.Trace("[SS] Driver: equip detected -> QuickTick sent")
     endif
-Bool Function ReadUseTierSystemFlag()
-  Int sentinel = JsonUtil.GetPathIntValue(CFG_PATH, "penalties.useTierSystem", -9999)
-  if sentinel != -9999
-    return sentinel > 0
-  endif
-  return JsonUtil.GetPathBoolValue(CFG_PATH, "penalties.useTierSystem", False)
-EndFunction
-
-; ========== Events from controller ==========
-Event OnObjectEquipped(Form akBaseObject, ObjectReference akRef)
-  if ShouldForceRefresh(akBaseObject)
-    TriggerQuickTick("equip", akBaseObject)
   endif
 EndEvent
 
@@ -211,48 +135,6 @@ Function ClearTierEffects()
 EndFunction
 
 Function ApplyTierEffects(Int tier)
-  if ShouldForceRefresh(akBaseObject)
-    TriggerQuickTick("unequip", akBaseObject)
-  endif
-EndEvent
-
-Bool Function ShouldForceRefresh(Form equippedObject)
-  if equippedObject == None
-    return False
-  endif
-
-  if equippedObject as Armor
-    return True
-  endif
-
-  if equippedObject as Light
-    return True
-  endif
-
-  return False
-EndFunction
-
-Function TriggerQuickTick(String reason, Form equippedObject)
-  int h = ModEvent.Create("SS_QuickTick")
-  if h
-    ModEvent.PushString(h, "")
-    ModEvent.PushFloat(h, 0.0)
-    ModEvent.Send(h)
-  endif
-
-  if !bTraceLogs
-    return
-  endif
-
-  String objectName = ""
-  if equippedObject != None
-    objectName = equippedObject.GetName()
-  endif
-
-  Debug.Trace("[SS] Driver: " + reason + " detected -> QuickTick sent (" + objectName + ")")
-EndFunction
-
-Event OnColdEvent(Int healthPenaltyPct, Int staminaPenaltyPct, Int magickaPenaltyPct, Int speedPenaltyPct)
   if PlayerRef == None
     return
   endif
@@ -300,60 +182,6 @@ Function ApplyTierFourBonuses()
 EndFunction
 
 Function SuppressNaturalRegen()
-  useTierSystem = ReadUseTierSystemFlag()
-  if useTierSystem
-    if bTraceLogs
-      Debug.Trace("[SS] Driver: ignoring SS_SetCold (tier system active)")
-    endif
-    return
-  endif
-
-  ClearTierEffects()
-
-  appliedHealthPenaltyPct  = SanitizePenalty(healthPenaltyPct, 80)
-  appliedStaminaPenaltyPct = SanitizePenalty(staminaPenaltyPct, 80)
-  appliedMagickaPenaltyPct = SanitizePenalty(magickaPenaltyPct, 80)
-  appliedSpeedPenaltyPct   = SanitizePenalty(speedPenaltyPct, 50)
-
-  targetHealthRatio  = ComputeTargetRatio(appliedHealthPenaltyPct)
-  targetStaminaRatio = ComputeTargetRatio(appliedStaminaPenaltyPct)
-  targetMagickaRatio = ComputeTargetRatio(appliedMagickaPenaltyPct)
-
-  ApplySpeedPenalty(appliedSpeedPenaltyPct)
-  ApplyRegenPenalty("HealRateMult",    appliedHealthPenaltyPct)
-  ApplyRegenPenalty("StaminaRateMult", appliedStaminaPenaltyPct)
-  ApplyRegenPenalty("MagickaRateMult", appliedMagickaPenaltyPct)
-
-  if NeedsDamageLoop()
-    EnsureDamageLoop()
-  endif
-
-  if bTraceLogs
-    Float sm = PlayerRef.GetActorValue("SpeedMult")
-    Float hr = PlayerRef.GetActorValue("HealRateMult")
-    Float sr = PlayerRef.GetActorValue("StaminaRateMult")
-    Float mr = PlayerRef.GetActorValue("MagickaRateMult")
-    Debug.Trace("[SS] Driver <- hp=" + appliedHealthPenaltyPct + "% st=" + appliedStaminaPenaltyPct + "% mg=" + appliedMagickaPenaltyPct + "% speed=" + appliedSpeedPenaltyPct + "% | post SpeedMult=" + sm + " HealRateMult=" + hr + " StaminaRateMult=" + sr + " MagickaRateMult=" + mr)
-  endif
-EndEvent
-
-Event OnColdClear()
-  useTierSystem = ReadUseTierSystemFlag()
-  if useTierSystem
-    ClearTierEffects()
-    if bTraceLogs
-      Debug.Trace("[SS] Driver: ignoring SS_ClearCold (tier system active)")
-    endif
-    return
-  endif
-
-  ClearAll()
-  if bTraceLogs
-    Debug.Trace("[SS] Driver: clear request")
-  endif
-EndEvent
-
-Event OnTierChanged(Int newTier, String changeSource)
   if PlayerRef == None
     return
   endif

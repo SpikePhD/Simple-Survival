@@ -260,9 +260,9 @@ Function EvaluateWeather(String source = "Tick")
       ModEvent.Send(h)
 
       if bDebugEnabled
-        String msg = "[SS] warm=" + warmth + " / req=" + baseRequirement + " + modifiers=" + modifierSum + " => " + safeReq + " | def=" + deficit + " | hpPen=" + healthPenaltyPct + "% spdPen=" + speedPenaltyPct + "%"
+        String debugMsg = "[SS] warm=" + warmth + " / req=" + baseRequirement + " + modifiers=" + modifierSum + " => " + safeReq + " | def=" + deficit + " | hpPen=" + healthPenaltyPct + "% spdPen=" + speedPenaltyPct + "%"
         if bTraceLogs
-          Debug.Trace(msg)
+          Debug.Trace(debugMsg)
         else
           Debug.Notification(msg)
     if !useTierSystem
