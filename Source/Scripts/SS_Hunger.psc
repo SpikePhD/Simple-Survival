@@ -29,6 +29,7 @@ Int lastHungerTier = 0
 Bool isSleepingState = False
 Bool hourlyUpdateArmed = False
 Bool suppressHungerTierToasts = False
+Bool bTraceLogs = False
 
 Keyword baseFoodKeyword
 Keyword rawFoodKeyword
@@ -44,6 +45,11 @@ EndEvent
 
 Event OnPlayerLoadGame()
   InitializeModule()
+EndEvent
+
+Event OnPlayerSaveGame()
+  EnsureInitialized()
+  SaveHungerState()
 EndEvent
 
 Function InitializeModule()
@@ -82,6 +88,9 @@ Function UpdateFromGameTime(Bool isSleepingOverride = False)
   Float hoursElapsed = deltaDays * 24.0
   Bool sleepingState = ResolveSleepingState(isSleepingOverride)
   ApplyHungerDecay(hoursElapsed, sleepingState, nowTime)
+  if hoursElapsed > 0.0
+    TraceHungerTick(hoursElapsed, sleepingState)
+  endif
   lastDecayCheckGameTime = nowTime
   SaveHungerState()
 EndFunction
@@ -119,6 +128,7 @@ Function HandleFoodConsumed(AlchemyItem foodItem)
   lastDecayCheckGameTime = nowTime
   SaveHungerState()
 
+  TraceFoodConsumed(foodItem, restorePoints)
   DispatchFoodToast(restorePoints, rawState)
 EndFunction
 
@@ -190,6 +200,7 @@ Function SetHungerValue(Float newValue, Float currentGameTime = -1.0)
   Int resolvedTier = DetermineHungerTier(lastHungerValue)
 
   if resolvedTier != previousTier
+    TraceHungerTier(resolvedTier)
     SendHungerTierEvent(resolvedTier)
     HandleHungerTierChanged(resolvedTier, previousTier)
   endif
@@ -635,7 +646,12 @@ Function LoadHungerConfig()
   HungerTier2Min = ClampInt(JsonUtil.GetPathIntValue(CFG_PATH, "hunger.tiers.t2_min", 25), 0, 100)
   HungerTier1Min = ClampInt(JsonUtil.GetPathIntValue(CFG_PATH, "hunger.tiers.t1_min", 10), 0, 100)
 
+  RefreshDebugTraceFlag()
   LoadFoodConsumptionConfig()
+EndFunction
+
+Function ApplyDebugFlags()
+  RefreshDebugTraceFlag()
 EndFunction
 
 Function LoadFoodConsumptionConfig()
@@ -869,5 +885,64 @@ Float Function GetStoredFloat(String storageKey, Float fallback)
     return StorageUtil.GetFloatValue(None, storageKey)
   endif
   return fallback
+EndFunction
+
+Function RefreshDebugTraceFlag()
+  bTraceLogs = JsonUtil.GetPathBoolValue(CFG_PATH, "debug.trace", False)
+EndFunction
+
+Function TraceHunger(String message)
+  if !bTraceLogs
+    return
+  endif
+
+  Debug.Trace("[SS][Hunger] " + message)
+EndFunction
+
+Function TraceHungerTick(Float hoursElapsed, Bool sleepingState)
+  if !bTraceLogs
+    return
+  endif
+
+  String stateLabel = "awake"
+  if sleepingState
+    stateLabel = "sleep"
+  endif
+
+  String hoursText = Utility.ToString(hoursElapsed, 2)
+  String hungerText = Utility.ToString(lastHungerValue)
+  TraceHunger("tick Δh=" + hoursText + " " + stateLabel + ", hunger=" + hungerText)
+EndFunction
+
+Function TraceHungerTier(Int tier)
+  if !bTraceLogs
+    return
+  endif
+
+  TraceHunger("tier -> " + Utility.ToString(tier))
+EndFunction
+
+Function TraceFoodConsumed(AlchemyItem foodItem, Int restorePoints)
+  if !bTraceLogs
+    return
+  endif
+
+  String foodName = ""
+  if foodItem != None
+    foodName = foodItem.GetName()
+  endif
+
+  if foodName == ""
+    foodName = "(unnamed)"
+  endif
+
+  Int goldValue = 0
+  if foodItem != None
+    goldValue = foodItem.GetGoldValue()
+  endif
+
+  String valueText = Utility.ToString(goldValue)
+  String restoreText = Utility.ToString(restorePoints)
+  TraceHunger("ate " + foodName + " (value=" + valueText + ") -> +" + restoreText)
 EndFunction
 
