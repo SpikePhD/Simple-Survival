@@ -7,6 +7,7 @@ String Property CFG_PATH = "Data\\SKSE\\Plugins\\SS\\config.json" Auto
 Float Property DamagePerSecond = 5.0 Auto
 Float Property DamageTickInterval = 1.0 Auto
 Bool bTraceLogs = False
+Bool useTierSystem = False
 
 ; ---- Penalty tracking ----
 Int   appliedHealthPenaltyPct  = 0
@@ -19,16 +20,40 @@ Float targetStaminaRatio = 1.0
 Float targetMagickaRatio = 1.0
 
 Bool  damageLoopActive = False
+Bool  tierDamageLoopActive = False
+Float tierSpeedDelta = 0.0
+Bool  tierHealModified = False
+Bool  tierStaminaModified = False
+Bool  tierMagickaModified = False
+Float tierHealRateMult = 1.0
+Float tierStaminaRateMult = 1.0
+Float tierMagickaRateMult = 1.0
+Int   currentTier = -1
+Int   lastTier = -1
+Float kTierDamageTickInterval = 1.0
 
 Actor PlayerRef
 
 Event OnEffectStart(Actor akTarget, Actor akCaster)
   PlayerRef = akTarget
   ApplyDebug()
+  useTierSystem = ReadUseTierSystemFlag()
+  damageLoopActive = False
+  tierDamageLoopActive = False
+  tierSpeedDelta = 0.0
+  tierHealModified = False
+  tierStaminaModified = False
+  tierMagickaModified = False
+  tierHealRateMult = 1.0
+  tierStaminaRateMult = 1.0
+  tierMagickaRateMult = 1.0
+  currentTier = -1
+  lastTier = -1
   RegisterForModEvent("SS_SetCold", "OnColdEvent")
   RegisterForModEvent("SS_ClearCold", "OnColdClear")
+  RegisterForModEvent("SS_TierChanged", "OnTierChanged")
   if bTraceLogs
-    Debug.Trace("[SS] Driver OnEffectStart: registered for SS_SetCold / SS_ClearCold")
+    Debug.Trace("[SS] Driver OnEffectStart: registered for SS_SetCold / SS_ClearCold / SS_TierChanged | tierFlag=" + useTierSystem)
   endif
 EndEvent
 
@@ -38,12 +63,22 @@ Event OnEffectFinish(Actor akTarget, Actor akCaster)
   if bTraceLogs
     Debug.Trace("[SS] AbilityDriver: finish & cleared")
   endif
+  currentTier = -1
+  lastTier = -1
   PlayerRef = None
 EndEvent
 
 Function ApplyDebug()
   Bool dbg = JsonUtil.GetPathBoolValue(CFG_PATH, "debug.trace", False)
   bTraceLogs = dbg
+EndFunction
+
+Bool Function ReadUseTierSystemFlag()
+  Int sentinel = JsonUtil.GetPathIntValue(CFG_PATH, "penalties.useTierSystem", -9999)
+  if sentinel != -9999
+    return sentinel > 0
+  endif
+  return JsonUtil.GetPathBoolValue(CFG_PATH, "penalties.useTierSystem", False)
 EndFunction
 
 ; ========== Events from controller ==========
@@ -100,6 +135,16 @@ Event OnColdEvent(Int healthPenaltyPct, Int staminaPenaltyPct, Int magickaPenalt
     return
   endif
 
+  useTierSystem = ReadUseTierSystemFlag()
+  if useTierSystem
+    if bTraceLogs
+      Debug.Trace("[SS] Driver: ignoring SS_SetCold (tier system active)")
+    endif
+    return
+  endif
+
+  ClearTierEffects()
+
   appliedHealthPenaltyPct  = SanitizePenalty(healthPenaltyPct, 80)
   appliedStaminaPenaltyPct = SanitizePenalty(staminaPenaltyPct, 80)
   appliedMagickaPenaltyPct = SanitizePenalty(magickaPenaltyPct, 80)
@@ -128,16 +173,63 @@ Event OnColdEvent(Int healthPenaltyPct, Int staminaPenaltyPct, Int magickaPenalt
 EndEvent
 
 Event OnColdClear()
+  useTierSystem = ReadUseTierSystemFlag()
+  if useTierSystem
+    ClearTierEffects()
+    if bTraceLogs
+      Debug.Trace("[SS] Driver: ignoring SS_ClearCold (tier system active)")
+    endif
+    return
+  endif
+
   ClearAll()
   if bTraceLogs
     Debug.Trace("[SS] Driver: clear request")
   endif
 EndEvent
 
-Function ClearAll()
+Event OnTierChanged(Int newTier, String changeSource)
   if PlayerRef == None
     return
   endif
+
+  useTierSystem = ReadUseTierSystemFlag()
+  if !useTierSystem
+    if bTraceLogs
+      Debug.Trace("[SS] Driver: tier change ignored (tier system disabled)")
+    endif
+    return
+  endif
+
+  Int sanitizedTier = newTier
+  if sanitizedTier < -1
+    sanitizedTier = -1
+  elseif sanitizedTier > 4
+    sanitizedTier = 4
+  endif
+
+  currentTier = sanitizedTier
+
+  if bTraceLogs
+    Debug.Trace("[SS] Driver: tier -> " + sanitizedTier + " (" + changeSource + ")")
+  endif
+
+  if sanitizedTier != lastTier
+    ClearAll()
+    ApplyTierEffects(sanitizedTier)
+    lastTier = sanitizedTier
+  else
+    ApplyTierEffects(sanitizedTier)
+  endif
+EndEvent
+
+Function ClearAll()
+  if PlayerRef == None
+    ClearTierEffects()
+    return
+  endif
+
+  ClearTierEffects()
 
   ApplySpeedPenalty(0)
   targetHealthRatio  = 1.0
@@ -176,7 +268,9 @@ EndFunction
 
 Function StopDamageLoop()
   damageLoopActive = False
-  UnregisterForUpdate()
+  if !tierDamageLoopActive
+    UnregisterForUpdate()
+  endif
 EndFunction
 
 Bool Function NeedsDamageLoop()
@@ -215,6 +309,15 @@ EndFunction
 Event OnUpdate()
   if PlayerRef == None
     damageLoopActive = False
+    StopTierDamageLoop()
+    return
+  endif
+
+  if useTierSystem
+    if tierDamageLoopActive
+      ; future tier DoT logic placeholder
+      RegisterForSingleUpdate(kTierDamageTickInterval)
+    endif
     return
   endif
 
@@ -304,4 +407,53 @@ Int Function SanitizePenalty(Int value, Int maxAllowed)
     return 0
   endif
   return value
+EndFunction
+
+Function ClearTierEffects()
+  Actor target = PlayerRef
+  if target != None
+    if tierSpeedDelta != 0.0
+      target.ModActorValue("SpeedMult", -tierSpeedDelta)
+    endif
+    if tierHealModified
+      target.SetActorValue("HealRateMult", 1.0)
+    endif
+    if tierStaminaModified
+      target.SetActorValue("StaminaRateMult", 1.0)
+    endif
+    if tierMagickaModified
+      target.SetActorValue("MagickaRateMult", 1.0)
+    endif
+  endif
+
+  tierSpeedDelta = 0.0
+  tierHealModified = False
+  tierStaminaModified = False
+  tierMagickaModified = False
+  tierHealRateMult = 1.0
+  tierStaminaRateMult = 1.0
+  tierMagickaRateMult = 1.0
+  StopTierDamageLoop()
+EndFunction
+
+Function ApplyTierEffects(Int tier)
+  ; Placeholder for tier-based penalties
+EndFunction
+
+Function StartTierDamageLoop()
+  if tierDamageLoopActive
+    return
+  endif
+  if !useTierSystem
+    return
+  endif
+  tierDamageLoopActive = True
+  RegisterForSingleUpdate(kTierDamageTickInterval)
+EndFunction
+
+Function StopTierDamageLoop()
+  tierDamageLoopActive = False
+  if !damageLoopActive
+    UnregisterForUpdate()
+  endif
 EndFunction
