@@ -482,16 +482,16 @@ Int Function ClampInt(Int value, Int minValue, Int maxValue)
   return value
 EndFunction
 
-Int Function GetStoredInt(String key, Int fallback)
-  if StorageUtil.HasIntValue(None, key)
-    return StorageUtil.GetIntValue(None, key)
+Int Function GetStoredInt(String storageKey, Int fallback)
+  if StorageUtil.HasIntValue(None, storageKey)
+    return StorageUtil.GetIntValue(None, storageKey)
   endif
   return fallback
 EndFunction
 
-Float Function GetStoredFloat(String key, Float fallback)
-  if StorageUtil.HasFloatValue(None, key)
-    return StorageUtil.GetFloatValue(None, key)
+Float Function GetStoredFloat(String storageKey, Float fallback)
+  if StorageUtil.HasFloatValue(None, storageKey)
+    return StorageUtil.GetFloatValue(None, storageKey)
   endif
   return fallback
 EndFunction
