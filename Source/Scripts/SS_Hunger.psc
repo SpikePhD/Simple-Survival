@@ -246,7 +246,8 @@ Bool Function ResolveSleepingState(Bool overrideState = False)
 
   Actor player = Game.GetPlayer()
   if player != None
-    return player.IsSleeping()
+    Int sleepState = player.GetSleepState()
+    return sleepState >= 3
   endif
 
   return False
@@ -345,13 +346,13 @@ Function DispatchFoodToast(Int restorePoints, Bool isRawFood)
     return
   endif
 
-  String pointsText = Utility.ToString(restorePoints)
-  String message = "That hit the spot. (+" + pointsText + ")"
+  String pointsText = IntToString(restorePoints)
+  String notificationText = "That hit the spot. (+" + pointsText + ")"
   if isRawFood
-    message = "Raw food barely helps. (+" + pointsText + ")"
+    notificationText = "Raw food barely helps. (+" + pointsText + ")"
   endif
 
-  Debug.Notification(message)
+  Debug.Notification(notificationText)
 EndFunction
 
 String Function GetHungerTierToastMessage(Int tier)
@@ -729,7 +730,7 @@ Function LoadFoodValueBands()
 
   Int i = 0
   while i < bandCount
-    String basePath = "hunger.food.valueBands[" + Utility.ToString(i) + "]"
+    String basePath = "hunger.food.valueBands[" + IntToString(i) + "]"
     foodValueBandMins[i] = JsonUtil.GetPathIntValue(CFG_PATH, basePath + ".min", 0)
     foodValueBandMaxes[i] = JsonUtil.GetPathIntValue(CFG_PATH, basePath + ".max", 0)
     foodValueBandPoints[i] = JsonUtil.GetPathIntValue(CFG_PATH, basePath + ".points", 0)
@@ -874,10 +875,6 @@ Int Function DetermineFoodPointsForValue(Int goldValue)
 EndFunction
 
 Keyword Function ResolveKeyword(String keywordName)
-  if keywordName == None
-    return None
-  endif
-
   if keywordName == ""
     return None
   endif
@@ -917,12 +914,12 @@ Function RefreshDebugTraceFlag()
   bTraceLogs = JsonUtil.GetPathBoolValue(CFG_PATH, "debug.trace", False)
 EndFunction
 
-Function TraceHunger(String message)
+Function TraceHunger(String logMessage)
   if !bTraceLogs
     return
   endif
 
-  Debug.Trace("[SS][Hunger] " + message)
+  Debug.Trace("[SS][Hunger] " + logMessage)
 EndFunction
 
 Function TraceHungerTick(Float hoursElapsed, Bool sleepingState)
@@ -935,8 +932,8 @@ Function TraceHungerTick(Float hoursElapsed, Bool sleepingState)
     stateLabel = "sleep"
   endif
 
-  String hoursText = Utility.ToString(hoursElapsed, 2)
-  String hungerText = Utility.ToString(lastHungerValue)
+  String hoursText = FloatToString(hoursElapsed)
+  String hungerText = IntToString(lastHungerValue)
   TraceHunger("tick Δh=" + hoursText + " " + stateLabel + ", hunger=" + hungerText)
 EndFunction
 
@@ -945,7 +942,7 @@ Function TraceHungerTier(Int tier)
     return
   endif
 
-  TraceHunger("tier -> " + Utility.ToString(tier))
+  TraceHunger("tier -> " + IntToString(tier))
 EndFunction
 
 Function TraceFoodConsumed(Potion foodItem, Int restorePoints)
@@ -967,8 +964,16 @@ Function TraceFoodConsumed(Potion foodItem, Int restorePoints)
     goldValue = foodItem.GetGoldValue()
   endif
 
-  String valueText = Utility.ToString(goldValue)
-  String restoreText = Utility.ToString(restorePoints)
+  String valueText = IntToString(goldValue)
+  String restoreText = IntToString(restorePoints)
   TraceHunger("ate " + foodName + " (value=" + valueText + ") -> +" + restoreText)
+EndFunction
+
+String Function IntToString(Int value)
+  return "" + value
+EndFunction
+
+String Function FloatToString(Float value)
+  return "" + value
 EndFunction
 
