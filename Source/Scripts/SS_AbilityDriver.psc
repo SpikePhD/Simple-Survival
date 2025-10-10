@@ -70,7 +70,7 @@ EndFunction
 
 ; ========== Events from controller ==========
 Event OnObjectEquipped(Form akBaseObject, ObjectReference akRef)
-  if akBaseObject as Armor
+  if akBaseObject as Armor || akBaseObject as Light
     int h = ModEvent.Create("SS_QuickTick")
     if h
       ModEvent.PushString(h, "")
@@ -84,7 +84,7 @@ Event OnObjectEquipped(Form akBaseObject, ObjectReference akRef)
 EndEvent
 
 Event OnObjectUnequipped(Form akBaseObject, ObjectReference akRef)
-  if akBaseObject as Armor
+  if akBaseObject as Armor || akBaseObject as Light
     int h = ModEvent.Create("SS_QuickTick")
     if h
       ModEvent.PushString(h, "")

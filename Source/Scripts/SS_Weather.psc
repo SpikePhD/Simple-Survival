@@ -39,7 +39,7 @@ Float kNormalTickH  = 0.10       ; 6  in-game minutes
 Float kSlowTickH    = 0.40       ; 24 in-game minutes
 Float kColdDrainFrac = 0.05
 Float kColdFloorFrac = 0.20
-Float kMinRefreshGapSeconds = 0.3
+Float kMinRefreshGapSeconds = 0.0
 
 Bool  bRefreshQueued = False
 String queuedSource = ""
@@ -1337,8 +1337,8 @@ EndEvent
 
 Float Function GetMinRefreshGapSeconds()
   Float configured = GetF("weather.cold.minRefreshGapSeconds", kMinRefreshGapSeconds)
-  if configured <= 0.0
-    return kMinRefreshGapSeconds
+  if configured < 0.0
+    return 0.0
   endif
   return configured
 EndFunction
