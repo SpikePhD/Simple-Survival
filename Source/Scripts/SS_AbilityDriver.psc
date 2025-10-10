@@ -15,11 +15,24 @@ Float Property Tier1SpeedPenaltyPct = 10.0 Auto
 Float Property Tier0SpeedPenaltyPct = 25.0 Auto
 Float Property Tier4BonusMaxPct = 10.0 Auto
 Float Property Tier4BonusRegenPct = 25.0 Auto
+
+Float Property HungerTier2DamagePerSecond = 5.0 Auto
+Float Property HungerTier1DamagePerSecond = 10.0 Auto
+Float Property HungerTier0DamagePerSecond = 15.0 Auto
+Float Property HungerTier2FloorPercent = 90.0 Auto
+Float Property HungerTier1FloorPercent = 75.0 Auto
+Float Property HungerTier0FloorPercent = 50.0 Auto
+Float Property HungerTier2SpeedPenaltyPct = 0.0 Auto
+Float Property HungerTier1SpeedPenaltyPct = 10.0 Auto
+Float Property HungerTier0SpeedPenaltyPct = 25.0 Auto
+Float Property HungerTier4BonusMaxPct = 10.0 Auto
+Float Property HungerTier4BonusRegenPct = 10.0 Auto
 Bool bTraceLogs = False
 
 ; ---- Tier tracking ----
 Actor PlayerRef
-Int   currentTier = -1
+Int   currentWeatherTier = -1
+Int   currentHungerTier = -1
 
 Float appliedSpeedDelta = 0.0
 Float appliedHealRateDelta = 0.0
@@ -30,10 +43,23 @@ Float appliedStaminaBonus = 0.0
 Float appliedMagickaBonus = 0.0
 
 Bool  updateLoopActive = False
-Bool  tierDamageLoopActive = False
+Bool  weatherDamageLoopActive = False
+Bool  hungerDamageLoopActive = False
 Bool  linearDamageLoopActive = False
-Float activeDamagePerSecond = 0.0
-Float activeDamageFloorPercent = 0.0
+Float weatherDamagePerSecond = 0.0
+Float weatherDamageFloorPercent = 0.0
+Float hungerDamagePerSecond = 0.0
+Float hungerDamageFloorPercent = 0.0
+
+Float weatherSpeedDelta = 0.0
+Bool  weatherRegenOverride = False
+Float weatherRegenBonusPct = 0.0
+Float weatherBonusMaxPct = 0.0
+
+Float hungerSpeedDelta = 0.0
+Bool  hungerRegenOverride = False
+Float hungerRegenBonusPct = 0.0
+Float hungerBonusMaxPct = 0.0
 
 Float targetHealthRatio  = 1.0
 Float targetStaminaRatio = 1.0
@@ -49,8 +75,9 @@ Event OnEffectStart(Actor akTarget, Actor akCaster)
   ApplyDebug()
   RegisterForModEvent("SS_SetCold", "OnColdEvent")
   RegisterForModEvent("SS_ClearCold", "OnColdClear")
+  RegisterForModEvent("SS_HungerTierChanged", "OnHungerTierChanged")
   if bTraceLogs
-    Debug.Trace("[SS] Driver OnEffectStart: registered for SS_SetCold / SS_ClearCold")
+    Debug.Trace("[SS] Driver OnEffectStart: registered for SS_SetCold / SS_ClearCold / SS_HungerTierChanged")
   endif
 EndEvent
 
@@ -113,67 +140,161 @@ Event OnColdClear()
   if bTraceLogs
     Debug.Trace("[SS] Driver: OnColdClear -> reset")
   endif
-  ClearAll()
+  ClearTierEffects()
+  ClearLinearEffects()
+EndEvent
+
+Event OnHungerTierChanged(Int newTier)
+  if PlayerRef == None
+    return
+  endif
+
+  HandleHungerTierUpdate(newTier)
 EndEvent
 
 Function ClearTierEffects()
-  if PlayerRef == None
-    return
-  endif
-
-  ApplySpeedDelta(0.0)
-  appliedHealRateDelta = ResetActorValueDelta("HealRateMult", appliedHealRateDelta)
-  appliedStaminaRateDelta = ResetActorValueDelta("StaminaRateMult", appliedStaminaRateDelta)
-  appliedMagickaRateDelta = ResetActorValueDelta("MagickaRateMult", appliedMagickaRateDelta)
-  ClearMaxBonuses()
-  StopTierDamageLoop()
+  ResetWeatherPackage()
+  currentWeatherTier = -1
+  ApplyAggregatedEffects()
 EndFunction
 
-Function ApplyTierEffects(Int tier)
-  if PlayerRef == None
-    return
-  endif
+
+Function ClearHungerEffects()
+  ResetHungerPackage()
+  currentHungerTier = -1
+  ApplyAggregatedEffects()
+EndFunction
+
+Function BuildWeatherPackageForTier(Int tier)
+  ResetWeatherPackage()
 
   if tier >= 4
-    ApplyTierFourBonuses()
-    return
-  endif
-
-  if tier == 3
-    return
-  endif
-
-  if tier == 2
-    StartTierDamageLoop(Tier2DamagePerSecond, Tier2FloorPercent)
+    weatherBonusMaxPct = Tier4BonusMaxPct
+    weatherRegenBonusPct = Tier4BonusRegenPct
+  elseif tier == 3
+    ; no additional effects
+  elseif tier == 2
+    weatherDamagePerSecond = Tier2DamagePerSecond
+    weatherDamageFloorPercent = Tier2FloorPercent
   elseif tier == 1
-    ApplySpeedDelta(-Tier1SpeedPenaltyPct)
-    StartTierDamageLoop(Tier1DamagePerSecond, Tier1FloorPercent)
+    weatherSpeedDelta = ResolvePenaltyDelta(Tier1SpeedPenaltyPct)
+    weatherDamagePerSecond = Tier1DamagePerSecond
+    weatherDamageFloorPercent = Tier1FloorPercent
   else
-    ApplySpeedDelta(-Tier0SpeedPenaltyPct)
-    SuppressNaturalRegen()
-    StartTierDamageLoop(Tier0DamagePerSecond, Tier0FloorPercent)
+    weatherSpeedDelta = ResolvePenaltyDelta(Tier0SpeedPenaltyPct)
+    weatherRegenOverride = True
+    weatherDamagePerSecond = Tier0DamagePerSecond
+    weatherDamageFloorPercent = Tier0FloorPercent
   endif
 EndFunction
 
-Function ApplyTierFourBonuses()
+Function BuildHungerPackageForTier(Int tier)
+  ResetHungerPackage()
+
+  if tier >= 4
+    hungerBonusMaxPct = HungerTier4BonusMaxPct
+    hungerRegenBonusPct = HungerTier4BonusRegenPct
+  elseif tier == 3
+    ; no additional effects
+  elseif tier == 2
+    hungerSpeedDelta = ResolvePenaltyDelta(HungerTier2SpeedPenaltyPct)
+    hungerDamagePerSecond = HungerTier2DamagePerSecond
+    hungerDamageFloorPercent = HungerTier2FloorPercent
+  elseif tier == 1
+    hungerSpeedDelta = ResolvePenaltyDelta(HungerTier1SpeedPenaltyPct)
+    hungerDamagePerSecond = HungerTier1DamagePerSecond
+    hungerDamageFloorPercent = HungerTier1FloorPercent
+  else
+    hungerSpeedDelta = ResolvePenaltyDelta(HungerTier0SpeedPenaltyPct)
+    hungerRegenOverride = True
+    hungerDamagePerSecond = HungerTier0DamagePerSecond
+    hungerDamageFloorPercent = HungerTier0FloorPercent
+  endif
+EndFunction
+
+Function ApplyAggregatedEffects()
   if PlayerRef == None
     return
   endif
 
-  Float bonusFrac = Tier4BonusMaxPct * 0.01
-  if bonusFrac > 0.0
-    appliedHealthBonus = ApplyMaxBonusForAV("Health", bonusFrac, appliedHealthBonus)
-    appliedStaminaBonus = ApplyMaxBonusForAV("Stamina", bonusFrac, appliedStaminaBonus)
-    appliedMagickaBonus = ApplyMaxBonusForAV("Magicka", bonusFrac, appliedMagickaBonus)
+  Float totalSpeedDelta = weatherSpeedDelta + hungerSpeedDelta
+  ApplySpeedDelta(totalSpeedDelta)
+
+  ApplyMaxBonusTotals(weatherBonusMaxPct + hungerBonusMaxPct)
+  ApplyRegenAggregates()
+  UpdateDamageLoopFlags()
+EndFunction
+
+Function ApplyMaxBonusTotals(Float totalBonusPct)
+  if totalBonusPct <= 0.0
+    ClearMaxBonuses()
+    return
   endif
 
-  Float regenFrac = Tier4BonusRegenPct * 0.01
-  if regenFrac > 0.0
-    Float factor = 1.0 + regenFrac
-    appliedHealRateDelta = ApplyActorValueTarget("HealRateMult", PlayerRef.GetActorValue("HealRateMult") * factor, appliedHealRateDelta)
-    appliedStaminaRateDelta = ApplyActorValueTarget("StaminaRateMult", PlayerRef.GetActorValue("StaminaRateMult") * factor, appliedStaminaRateDelta)
-    appliedMagickaRateDelta = ApplyActorValueTarget("MagickaRateMult", PlayerRef.GetActorValue("MagickaRateMult") * factor, appliedMagickaRateDelta)
+  Float bonusFrac = totalBonusPct * 0.01
+  appliedHealthBonus = ApplyMaxBonusForAV("Health", bonusFrac, appliedHealthBonus)
+  appliedStaminaBonus = ApplyMaxBonusForAV("Stamina", bonusFrac, appliedStaminaBonus)
+  appliedMagickaBonus = ApplyMaxBonusForAV("Magicka", bonusFrac, appliedMagickaBonus)
+EndFunction
+
+Function ApplyRegenAggregates()
+  if PlayerRef == None
+    return
   endif
+
+  if weatherRegenOverride || hungerRegenOverride
+    SuppressNaturalRegen()
+    return
+  endif
+
+  Float totalBonusPct = weatherRegenBonusPct + hungerRegenBonusPct
+  if totalBonusPct <= 0.0
+    appliedHealRateDelta = ResetActorValueDelta("HealRateMult", appliedHealRateDelta)
+    appliedStaminaRateDelta = ResetActorValueDelta("StaminaRateMult", appliedStaminaRateDelta)
+    appliedMagickaRateDelta = ResetActorValueDelta("MagickaRateMult", appliedMagickaRateDelta)
+    return
+  endif
+
+  Float factor = 1.0 + (totalBonusPct * 0.01)
+  appliedHealRateDelta = ApplyActorValueTarget("HealRateMult", PlayerRef.GetActorValue("HealRateMult") * factor, appliedHealRateDelta)
+  appliedStaminaRateDelta = ApplyActorValueTarget("StaminaRateMult", PlayerRef.GetActorValue("StaminaRateMult") * factor, appliedStaminaRateDelta)
+  appliedMagickaRateDelta = ApplyActorValueTarget("MagickaRateMult", PlayerRef.GetActorValue("MagickaRateMult") * factor, appliedMagickaRateDelta)
+EndFunction
+
+Function ResetWeatherPackage()
+  weatherSpeedDelta = 0.0
+  weatherRegenOverride = False
+  weatherRegenBonusPct = 0.0
+  weatherBonusMaxPct = 0.0
+  weatherDamagePerSecond = 0.0
+  weatherDamageFloorPercent = 0.0
+EndFunction
+
+Function ResetHungerPackage()
+  hungerSpeedDelta = 0.0
+  hungerRegenOverride = False
+  hungerRegenBonusPct = 0.0
+  hungerBonusMaxPct = 0.0
+  hungerDamagePerSecond = 0.0
+  hungerDamageFloorPercent = 0.0
+EndFunction
+
+Function UpdateDamageLoopFlags()
+  weatherDamageLoopActive = weatherDamagePerSecond > 0.0
+  hungerDamageLoopActive = hungerDamagePerSecond > 0.0
+
+  if weatherDamageLoopActive || hungerDamageLoopActive || linearDamageLoopActive
+    EnsureUpdateLoop()
+  else
+    StopUpdateLoopIfIdle()
+  endif
+EndFunction
+
+Float Function ResolvePenaltyDelta(Float configuredValue)
+  if configuredValue > 0.0
+    return -configuredValue
+  endif
+  return configuredValue
 EndFunction
 
 Function SuppressNaturalRegen()
@@ -269,17 +390,17 @@ Function ApplySpeedDelta(Float newDelta)
   endif
 EndFunction
 
-Function ProcessTierDamageTick()
+Function ProcessDamageTick(Float damagePerSecond, Float floorPercent)
   if PlayerRef == None
     return
   endif
 
-  Float damagePerTick = activeDamagePerSecond * DamageTickInterval
+  Float damagePerTick = damagePerSecond * DamageTickInterval
   if damagePerTick <= 0.0
     return
   endif
 
-  Float floorRatio = ClampFloorRatio(activeDamageFloorPercent)
+  Float floorRatio = ClampFloorRatio(floorPercent)
 
   ApplyDamageWithFloor("Health", damagePerTick, floorRatio)
   ApplyDamageWithFloor("Stamina", damagePerTick, floorRatio)
@@ -344,21 +465,34 @@ EndFunction
 Function HandleTierUpdate(Int newTier)
   ClearLinearEffects()
   Int tier = NormalizeTier(newTier)
-  if tier == currentTier
+  if tier == currentWeatherTier
     return
   endif
   if bTraceLogs
-    Debug.Trace("[SS] Driver: tier change " + currentTier + " -> " + tier)
+    Debug.Trace("[SS] Driver: weather tier change " + currentWeatherTier + " -> " + tier)
   endif
-  ClearTierEffects()
-  currentTier = tier
-  ApplyTierEffects(tier)
+  BuildWeatherPackageForTier(tier)
+  currentWeatherTier = tier
+  ApplyAggregatedEffects()
+EndFunction
+
+Function HandleHungerTierUpdate(Int newTier)
+  Int tier = NormalizeTier(newTier)
+  if tier == currentHungerTier
+    return
+  endif
+  if bTraceLogs
+    Debug.Trace("[SS] Driver: hunger tier change " + currentHungerTier + " -> " + tier)
+  endif
+  BuildHungerPackageForTier(tier)
+  currentHungerTier = tier
+  ApplyAggregatedEffects()
 EndFunction
 
 Function HandleLinearPenalties(Int healthPenaltyPct, Int staminaPenaltyPct, Int magickaPenaltyPct, Int speedPenaltyPct)
   ClearTierEffects()
   ClearLinearEffects()
-  currentTier = -1
+  currentWeatherTier = -1
 
   Int healthPenalty = SanitizePenalty(healthPenaltyPct, 80)
   Int staminaPenalty = SanitizePenalty(staminaPenaltyPct, 80)
@@ -388,6 +522,8 @@ Function HandleLinearPenalties(Int healthPenaltyPct, Int staminaPenaltyPct, Int 
   else
     StopLinearDamageLoop()
   endif
+
+  ApplyAggregatedEffects()
 EndFunction
 
 Function ClearAll()
@@ -396,8 +532,8 @@ Function ClearAll()
   endif
 
   ClearTierEffects()
+  ClearHungerEffects()
   ClearLinearEffects()
-  currentTier = -1
 EndFunction
 
 Function ClearLinearEffects()
@@ -417,6 +553,7 @@ Function ClearLinearEffects()
   PlayerRef.SetActorValue("StaminaRateMult", 1.0)
   PlayerRef.SetActorValue("MagickaRateMult", 1.0)
   StopLinearDamageLoop()
+  ApplyAggregatedEffects()
 EndFunction
 
 Function ApplySpeedPenalty(Int newPenaltyPct)
@@ -468,33 +605,6 @@ Float Function ComputeTargetRatio(Int penaltyPct)
   return ratio
 EndFunction
 
-Function StartTierDamageLoop(Float damagePerSecond, Float floorPercent)
-  if PlayerRef == None
-    return
-  endif
-
-  activeDamagePerSecond = damagePerSecond
-  activeDamageFloorPercent = floorPercent
-
-  if activeDamagePerSecond <= 0.0
-    tierDamageLoopActive = False
-    activeDamagePerSecond = 0.0
-    activeDamageFloorPercent = 0.0
-    StopUpdateLoopIfIdle()
-    return
-  endif
-
-  tierDamageLoopActive = True
-  EnsureUpdateLoop()
-EndFunction
-
-Function StopTierDamageLoop()
-  tierDamageLoopActive = False
-  activeDamagePerSecond = 0.0
-  activeDamageFloorPercent = 0.0
-  StopUpdateLoopIfIdle()
-EndFunction
-
 Function StartLinearDamageLoop()
   linearDamageLoopActive = True
   EnsureUpdateLoop()
@@ -513,7 +623,7 @@ Function EnsureUpdateLoop()
 EndFunction
 
 Function StopUpdateLoopIfIdle()
-  if !tierDamageLoopActive && !linearDamageLoopActive
+  if !weatherDamageLoopActive && !hungerDamageLoopActive && !linearDamageLoopActive
     updateLoopActive = False
     UnregisterForUpdate()
   endif
@@ -521,22 +631,27 @@ EndFunction
 
 Event OnUpdate()
   if PlayerRef == None
-    tierDamageLoopActive = False
+    weatherDamageLoopActive = False
+    hungerDamageLoopActive = False
     linearDamageLoopActive = False
     updateLoopActive = False
     UnregisterForUpdate()
     return
   endif
 
-  if tierDamageLoopActive
-    ProcessTierDamageTick()
+  if weatherDamageLoopActive
+    ProcessDamageTick(weatherDamagePerSecond, weatherDamageFloorPercent)
+  endif
+
+  if hungerDamageLoopActive
+    ProcessDamageTick(hungerDamagePerSecond, hungerDamageFloorPercent)
   endif
 
   if linearDamageLoopActive
     ProcessLinearDamageTick()
   endif
 
-  if tierDamageLoopActive || linearDamageLoopActive
+  if weatherDamageLoopActive || hungerDamageLoopActive || linearDamageLoopActive
     RegisterForSingleUpdate(DamageTickInterval)
   else
     updateLoopActive = False
