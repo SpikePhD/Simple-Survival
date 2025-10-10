@@ -8,6 +8,7 @@ String Property HungerKeyLastValue = "SS.Hunger.lastValue" Auto
 String Property HungerKeyLastHit100 = "SS.Hunger.lastHit100GameTime" Auto
 String Property HungerKeyLastDecayCheck = "SS.Hunger.lastDecayCheckGameTime" Auto
 String Property HungerKeyLastTier = "SS.Hunger.lastHungerTier" Auto
+String Property lastTierToast_Hunger Auto
 
 Bool bInitialized = False
 Bool HungerEnabled = True
@@ -27,6 +28,7 @@ Float lastDecayCheckGameTime = 0.0
 Int lastHungerTier = 0
 Bool isSleepingState = False
 Bool hourlyUpdateArmed = False
+Bool suppressHungerTierToasts = False
 
 Event OnInit()
   InitializeModule()
@@ -146,7 +148,14 @@ Function SetHungerValue(Float newValue, Float currentGameTime = -1.0)
     lastHit100GameTime = currentGameTime
   endif
 
-  lastHungerTier = DetermineHungerTier(lastHungerValue)
+  Int previousTier = lastHungerTier
+  Int resolvedTier = DetermineHungerTier(lastHungerValue)
+
+  if resolvedTier != previousTier
+    HandleHungerTierChanged(resolvedTier, previousTier)
+  endif
+
+  lastHungerTier = resolvedTier
 EndFunction
 
 Event OnUpdateGameTime()
@@ -193,16 +202,111 @@ Bool Function ResolveSleepingState(Bool overrideState = False)
 EndFunction
 
 Int Function DetermineHungerTier(Int hungerValue)
-  if hungerValue >= HungerTier4Min
+  Float maxValue = HungerMaxValue * 1.0
+  if maxValue <= 0.0
+    maxValue = 100.0
+  endif
+
+  Float normalized = 0.0
+  if hungerValue > 0
+    normalized = (hungerValue as Float) / maxValue * 100.0
+  endif
+
+  if normalized < 0.0
+    normalized = 0.0
+  elseif normalized > 100.0
+    normalized = 100.0
+  endif
+
+  if normalized >= HungerTier4Min
     return 4
-  elseif hungerValue >= HungerTier3Min
+  elseif normalized >= HungerTier3Min
     return 3
-  elseif hungerValue >= HungerTier2Min
+  elseif normalized >= HungerTier2Min
     return 2
-  elseif hungerValue >= HungerTier1Min
+  elseif normalized >= HungerTier1Min
     return 1
   endif
   return 0
+EndFunction
+
+Function HandleHungerTierChanged(Int newTier, Int previousTier)
+  if suppressHungerTierToasts
+    return
+  endif
+
+  if !HungerEnabled
+    return
+  endif
+
+  if !IsImmersionToastsEnabled()
+    return
+  endif
+
+  String toastMessage = GetHungerTierToastMessage(newTier)
+
+  if toastMessage == ""
+    if previousTier != newTier
+      lastTierToast_Hunger = ""
+    endif
+    return
+  endif
+
+  if toastMessage == lastTierToast_Hunger
+    return
+  endif
+
+  DispatchHungerImmersionToast(toastMessage)
+EndFunction
+
+Function DispatchHungerImmersionToast(String detail)
+  if Utility.IsInMenuMode()
+    return
+  endif
+
+  if detail == ""
+    return
+  endif
+
+  Debug.Notification(detail)
+
+  lastTierToast_Hunger = detail
+EndFunction
+
+String Function GetHungerTierToastMessage(Int tier)
+  String tierName = ""
+  String tierLine = ""
+
+  if tier == 4
+    tierName = "Well Fed"
+    tierLine = "I feel strong and nourished."
+  elseif tier == 3
+    tierName = "Satisfied"
+    tierLine = "I am content."
+  elseif tier == 2
+    tierName = "Hungry"
+    tierLine = "My stomach growls."
+  elseif tier == 1
+    tierName = "Starving"
+    tierLine = "Weakness creeps in, I need food."
+  elseif tier == 0
+    tierName = "Famished"
+    tierLine = "I am famished, my body fails me!"
+  endif
+
+  if tierName == "" && tierLine == ""
+    return ""
+  endif
+
+  if tierName != "" && tierLine != ""
+    return tierName + " — " + tierLine
+  endif
+
+  if tierName != ""
+    return tierName
+  endif
+
+  return tierLine
 EndFunction
 
 Function InitHungerConfigDefaults()
@@ -457,10 +561,10 @@ Function LoadHungerConfig()
     HungerSleepDecayPerHour = 0.0
   endif
 
-  HungerTier4Min = JsonUtil.GetPathIntValue(CFG_PATH, "hunger.tiers.t4_min", 75)
-  HungerTier3Min = JsonUtil.GetPathIntValue(CFG_PATH, "hunger.tiers.t3_min", 50)
-  HungerTier2Min = JsonUtil.GetPathIntValue(CFG_PATH, "hunger.tiers.t2_min", 25)
-  HungerTier1Min = JsonUtil.GetPathIntValue(CFG_PATH, "hunger.tiers.t1_min", 10)
+  HungerTier4Min = ClampInt(JsonUtil.GetPathIntValue(CFG_PATH, "hunger.tiers.t4_min", 75), 0, 100)
+  HungerTier3Min = ClampInt(JsonUtil.GetPathIntValue(CFG_PATH, "hunger.tiers.t3_min", 50), 0, 100)
+  HungerTier2Min = ClampInt(JsonUtil.GetPathIntValue(CFG_PATH, "hunger.tiers.t2_min", 25), 0, 100)
+  HungerTier1Min = ClampInt(JsonUtil.GetPathIntValue(CFG_PATH, "hunger.tiers.t1_min", 10), 0, 100)
 EndFunction
 
 Function LoadHungerState()
@@ -482,7 +586,9 @@ Function LoadHungerState()
 
   Int storedTier = GetStoredInt(HungerKeyLastTier, -1)
 
+  suppressHungerTierToasts = True
   SetHungerValue(storedValue, lastHit100GameTime)
+  suppressHungerTierToasts = False
 
   if storedTier >= 0 && storedTier <= 4
     lastHungerTier = storedTier
@@ -526,6 +632,10 @@ Int Function ClampInt(Int value, Int minValue, Int maxValue)
     value = maxValue
   endif
   return value
+EndFunction
+
+Bool Function IsImmersionToastsEnabled()
+  return JsonUtil.GetPathIntValue(CFG_PATH, "ui.toasts.immersion", 1) > 0
 EndFunction
 
 Int Function GetStoredInt(String storageKey, Int fallback)
