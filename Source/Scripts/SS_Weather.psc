@@ -834,6 +834,15 @@ Float Function GetPlayerWarmthScoreV1(Actor p, Float perPiece)
     total *= (perPiece / 100.0)
   endif
 
+  if p.IsSwimming()
+    Float swimMalus = GetF("weather.cold.swimWarmthMalus", 0.0)
+    if swimMalus > 0.0
+      total -= swimMalus
+    else
+      total += swimMalus
+    endif
+  endif
+
   return total
 EndFunction
 
@@ -1120,6 +1129,11 @@ Function InitConfigDefaults()
   f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.interiorAdjust", -9999.0)
   if f == -9999.0
     JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.interiorAdjust", -50.0)
+  endif
+
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.swimWarmthMalus", -9999.0)
+  if f == -9999.0
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.swimWarmthMalus", 0.0)
   endif
 
   f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.nightMultiplier", -9999.0)
