@@ -25,6 +25,8 @@ Int lastHungerValue = 0
 Float lastHit100GameTime = 0.0
 Float lastDecayCheckGameTime = 0.0
 Int lastHungerTier = 0
+Bool isSleepingState = False
+Bool hourlyUpdateArmed = False
 
 Event OnInit()
   InitializeModule()
@@ -39,14 +41,17 @@ Function InitializeModule()
   LoadHungerConfig()
   LoadHungerState()
   bInitialized = True
+  RefreshGameTimeUpdateRegistration()
 EndFunction
 
-Function UpdateFromGameTime(Bool isSleeping = False)
+Function UpdateFromGameTime(Bool isSleepingOverride = False)
   EnsureInitialized()
 
   if !HungerEnabled
     lastDecayCheckGameTime = Utility.GetCurrentGameTime()
     SaveHungerState()
+    UnregisterForUpdateGameTime()
+    hourlyUpdateArmed = False
     return
   endif
 
@@ -65,7 +70,8 @@ Function UpdateFromGameTime(Bool isSleeping = False)
   endif
 
   Float hoursElapsed = deltaDays * 24.0
-  ApplyHungerDecay(hoursElapsed, isSleeping, nowTime)
+  Bool sleepingState = ResolveSleepingState(isSleepingOverride)
+  ApplyHungerDecay(hoursElapsed, sleepingState, nowTime)
   lastDecayCheckGameTime = nowTime
   SaveHungerState()
 EndFunction
@@ -141,6 +147,49 @@ Function SetHungerValue(Float newValue, Float currentGameTime = -1.0)
   endif
 
   lastHungerTier = DetermineHungerTier(lastHungerValue)
+EndFunction
+
+Event OnUpdateGameTime()
+  hourlyUpdateArmed = False
+  UpdateFromGameTime()
+  RefreshGameTimeUpdateRegistration()
+EndEvent
+
+Event OnSleepStart(Float afSleepStartTime, Float afDesiredWakeTime)
+  isSleepingState = True
+EndEvent
+
+Event OnSleepStop(Bool abInterrupted)
+  isSleepingState = False
+EndEvent
+
+Function RefreshGameTimeUpdateRegistration()
+  if HungerEnabled
+    if !hourlyUpdateArmed
+      RegisterForSingleUpdateGameTime(1.0)
+      hourlyUpdateArmed = True
+    endif
+  else
+    UnregisterForUpdateGameTime()
+    hourlyUpdateArmed = False
+  endif
+EndFunction
+
+Bool Function ResolveSleepingState(Bool overrideState = False)
+  if overrideState
+    return True
+  endif
+
+  if isSleepingState
+    return True
+  endif
+
+  Actor player = Game.GetPlayer()
+  if player != None
+    return player.IsSleeping()
+  endif
+
+  return False
 EndFunction
 
 Int Function DetermineHungerTier(Int hungerValue)
