@@ -25,6 +25,16 @@
       "tick": 0.0
     }
   },
+  "gear": {
+    "nameBonuses": [
+      { "match": "fur",  "bonus": 20 },
+      { "match": "wool", "bonus": 15 },
+      { "match": "bear", "bonus": 30 },
+      { "match": "wolf", "bonus": 25 }
+    ],
+    "nameBonusMaxPerItem": 60,
+    "nameMatchCaseInsensitive": true
+  },
   "debug": {
     "enable": 0,
     "trace": 0

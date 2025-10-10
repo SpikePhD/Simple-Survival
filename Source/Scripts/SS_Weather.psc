@@ -69,6 +69,15 @@ Float kBaseWarmthHands = 25.0
 Float kBaseWarmthFeet  = 25.0
 Float kBaseWarmthCloak = 30.0
 
+; --- Gear warmth name bonus cache ---
+Bool  gearNameCacheValid = False
+Bool  gearNameCaseInsensitive = True
+Float gearNameBonusClamp = 0.0
+Int   gearNameCacheCount = 0
+Bool  gearNameUseLegacyFallback = False
+String[] gearNameMatchCache
+Float[]  gearNameBonusCache
+
 Function ConfigureModule(Spell ability)
   if ability != None
     SS_PlayerAbility = ability
@@ -198,6 +207,8 @@ Function EvaluateWeather(String source = "Tick")
   Float modifierSum = safeReq - baseRequirement
   Float autoPer   = GetF("weather.cold.autoWarmthPerPiece", 100.0)
   Float coldTick  = GetF("weather.cold.tick", 0.0) ; optional hp bleed per tick at max deficit
+
+  EnsureNameBonusCache(ShouldForceNameBonusReload(source))
 
   LastBaseRequirement = baseRequirement
   LastSafeRequirement = safeReq
@@ -846,6 +857,8 @@ Float Function GetPlayerWarmthScoreV1(Actor p, Float perPiece)
     return 0.0
   endif
 
+  EnsureNameBonusCache(False)
+
   Float total = 0.0
   total += ComputePieceWarmth(p, 0x00000004, kBaseWarmthBody)
   total += ComputePieceWarmth(p, 0x00000001, kBaseWarmthHead, GetHeadGear(p))
@@ -923,16 +936,60 @@ Float Function ComputePieceWarmth(Actor wearer, Int slotMask, Float baseWarmth, 
   endif
 
   Float warmth = baseWarmth
-  String rawName = a.GetName()
-  if rawName != ""
-    String lowerName = NormalizeWarmthName(rawName)
-    warmth += GetWarmthBonusFromName(lowerName)
-  endif
+  warmth += GetNameBonusForItem(a)
 
   return warmth
 EndFunction
 
-Float Function GetWarmthBonusFromName(String lowerName)
+Float Function GetNameBonusForItem(Form item)
+  if item == None
+    return 0.0
+  endif
+
+  EnsureNameBonusCache(False)
+
+  if !gearNameCacheValid
+    return 0.0
+  endif
+
+  String rawName = item.GetName()
+  if rawName == ""
+    return 0.0
+  endif
+
+  String comparisonName = rawName
+  if gearNameCaseInsensitive
+    comparisonName = NormalizeWarmthName(rawName)
+  endif
+
+  Float bonus = 0.0
+
+  if gearNameCacheCount > 0 && gearNameMatchCache != None && gearNameBonusCache != None
+    Int index = 0
+    while index < gearNameCacheCount
+      String matchToken = gearNameMatchCache[index]
+      if matchToken != "" && StringUtil.Find(comparisonName, matchToken) >= 0
+        bonus += gearNameBonusCache[index]
+      endif
+      index += 1
+    endwhile
+
+    if gearNameBonusClamp > 0.0 && bonus > gearNameBonusClamp
+      bonus = gearNameBonusClamp
+    endif
+
+    return bonus
+  endif
+
+  if gearNameUseLegacyFallback
+    String loweredName = NormalizeWarmthName(rawName)
+    return GetLegacyWarmthBonus(loweredName)
+  endif
+
+  return 0.0
+EndFunction
+
+Float Function GetLegacyWarmthBonus(String lowerName)
   if lowerName == ""
     return 0.0
   endif
@@ -1032,6 +1089,105 @@ Float Function GetWarmthBonusFromName(String lowerName)
   endif
 
   return bonus
+EndFunction
+
+Function InvalidateNameBonusCache()
+  gearNameCacheValid = False
+  gearNameCacheCount = 0
+  gearNameMatchCache = None
+  gearNameBonusCache = None
+  gearNameUseLegacyFallback = False
+  gearNameBonusClamp = 0.0
+EndFunction
+
+Function EnsureNameBonusCache(Bool forceReload = False)
+  if gearNameCacheValid && !forceReload
+    return
+  endif
+
+  gearNameCacheValid = False
+  gearNameCacheCount = 0
+  gearNameMatchCache = None
+  gearNameBonusCache = None
+  gearNameUseLegacyFallback = False
+
+  gearNameCaseInsensitive = GetB("gear.nameMatchCaseInsensitive", True)
+  gearNameBonusClamp = GetF("gear.nameBonusMaxPerItem", 0.0)
+  if gearNameBonusClamp < 0.0
+    gearNameBonusClamp = 0.0
+  endif
+
+  Int entryCount = JsonUtil.PathCount(CFG_PATH, "gear.nameBonuses")
+  if entryCount == -1
+    gearNameUseLegacyFallback = True
+    entryCount = 0
+  endif
+
+  if entryCount > 0
+    String[] matches = Utility.CreateStringArray(entryCount)
+    Float[]  values  = Utility.CreateFloatArray(entryCount)
+    Int validCount = 0
+    Int index = 0
+    while index < entryCount
+      String matchPath = "gear.nameBonuses[" + index + "].match"
+      String matchToken = JsonUtil.GetPathStringValue(CFG_PATH, matchPath, "")
+      matchToken = TrimWhitespace(matchToken)
+      String bonusPath = "gear.nameBonuses[" + index + "].bonus"
+      Float bonusValue = JsonUtil.GetPathFloatValue(CFG_PATH, bonusPath, 0.0)
+
+      if matchToken != "" && bonusValue > 0.0
+        if gearNameCaseInsensitive
+          matchToken = NormalizeWarmthName(matchToken)
+        endif
+        matches[validCount] = matchToken
+        values[validCount] = bonusValue
+        validCount += 1
+      endif
+
+      index += 1
+    endwhile
+
+    if validCount > 0
+      gearNameMatchCache = Utility.CreateStringArray(validCount)
+      gearNameBonusCache = Utility.CreateFloatArray(validCount)
+      index = 0
+      while index < validCount
+        gearNameMatchCache[index] = matches[index]
+        gearNameBonusCache[index] = values[index]
+        index += 1
+      endwhile
+      gearNameCacheCount = validCount
+    endif
+  endif
+
+  gearNameCacheValid = True
+EndFunction
+
+Bool Function ShouldForceNameBonusReload(String source)
+  if source == ""
+    return False
+  endif
+
+  if SourceIncludes(source, "MCM")
+    return True
+  endif
+  if SourceIncludes(source, "Refresh")
+    return True
+  endif
+  if SourceIncludes(source, "Init")
+    return True
+  endif
+  if SourceIncludes(source, "LoadGame")
+    return True
+  endif
+  if SourceIncludes(source, "QuickTick")
+    return True
+  endif
+  if SourceIncludes(source, "FastTick")
+    return True
+  endif
+
+  return False
 EndFunction
 
 String Function NormalizeWarmthName(String rawName)
@@ -1299,6 +1455,30 @@ Function InitConfigDefaults()
   if i == -9999
     JsonUtil.SetPathIntValue(CFG_PATH, "ui.toasts.immersion", 1)
   endif
+
+  i = JsonUtil.GetPathIntValue(CFG_PATH, "gear.nameMatchCaseInsensitive", -9999)
+  if i == -9999
+    JsonUtil.SetPathIntValue(CFG_PATH, "gear.nameMatchCaseInsensitive", 1)
+  endif
+
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "gear.nameBonusMaxPerItem", -9999.0)
+  if f == -9999.0
+    JsonUtil.SetPathFloatValue(CFG_PATH, "gear.nameBonusMaxPerItem", 60.0)
+  endif
+
+  Int gearBonusCount = JsonUtil.PathCount(CFG_PATH, "gear.nameBonuses")
+  if gearBonusCount == -1
+    JsonUtil.SetPathStringValue(CFG_PATH, "gear.nameBonuses[0].match", "fur")
+    JsonUtil.SetPathFloatValue(CFG_PATH, "gear.nameBonuses[0].bonus", 20.0)
+    JsonUtil.SetPathStringValue(CFG_PATH, "gear.nameBonuses[1].match", "wool")
+    JsonUtil.SetPathFloatValue(CFG_PATH, "gear.nameBonuses[1].bonus", 15.0)
+    JsonUtil.SetPathStringValue(CFG_PATH, "gear.nameBonuses[2].match", "bear")
+    JsonUtil.SetPathFloatValue(CFG_PATH, "gear.nameBonuses[2].bonus", 30.0)
+    JsonUtil.SetPathStringValue(CFG_PATH, "gear.nameBonuses[3].match", "wolf")
+    JsonUtil.SetPathFloatValue(CFG_PATH, "gear.nameBonuses[3].bonus", 25.0)
+  endif
+
+  InvalidateNameBonusCache()
 
   JsonUtil.Save(CFG_PATH)
 EndFunction
