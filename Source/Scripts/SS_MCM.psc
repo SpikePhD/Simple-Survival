@@ -109,7 +109,7 @@ Event OnPageReset(String a_page)
     _optDebugHeader = AddHeaderOption("Debug")
     _optDebugEnable = AddToggleOption("Enable on-screen debug", GetB("debug.enable"))
     _optDebugTrace  = AddToggleOption("Write traces to Papyrus log", GetB("debug.trace"))
-    _optDebugPing   = AddTextOption("Force refresh", "Send")
+    _optDebugPing   = AddTextOption("Force refresh", "Refresh now")
 
   ElseIf a_page == "Food"
     _optFoodHeader    = AddHeaderOption("Food & Hunger")
