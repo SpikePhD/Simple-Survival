@@ -40,12 +40,10 @@ Float kSlowTickH    = 0.40       ; 24 in-game minutes
 Float kColdDrainFrac = 0.05
 Float kColdFloorFrac = 0.20
 Float kMinRefreshGapSeconds = 0.3
-Float kToastCooldownSeconds = 1.0
 
 Bool  bRefreshQueued = False
 String queuedSource = ""
 Float lastEvaluateRealTime = 0.0
-Float lastToastRealTime = 0.0
 String lastToastMessage = ""
 String Property lastImmersionToast Auto
 String Property lastTierToast Auto
@@ -666,16 +664,10 @@ Function DispatchToast(String label, String detail, String category)
     return
   endif
 
-  Float now = Utility.GetCurrentRealTime()
-  Float elapsed = now - lastToastRealTime
-
   if toastMessage == lastToastMessage
-    if elapsed >= 0.0 && elapsed < kToastCooldownSeconds
-      return
-    endif
+    return
   endif
 
-  lastToastRealTime = now
   lastToastMessage = toastMessage
 
   Debug.Notification(toastMessage)
