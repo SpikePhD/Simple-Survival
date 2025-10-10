@@ -47,6 +47,8 @@ String queuedSource = ""
 Float lastEvaluateRealTime = 0.0
 Float lastToastRealTime = 0.0
 String lastToastMessage = ""
+String Property lastImmersionToast Auto
+String Property lastTierToast Auto
 
 Location lastKnownLocation
 String   lastLocationName = ""
@@ -321,13 +323,15 @@ Function EvaluateWeather(String source = "Tick")
         endif
       endif
 
-      if combinedMessage != ""
+      if combinedMessage != "" && combinedMessage != lastImmersionToast
         DispatchToast("", combinedMessage, "Immersion")
+        lastImmersionToast = combinedMessage
       endif
 
       String comfortMsg = GetPreparednessToastMessage(preparednessTier)
-      if comfortMsg != ""
+      if comfortMsg != "" && comfortMsg != lastTierToast
         DispatchToast("", comfortMsg, "Immersion")
+        lastTierToast = comfortMsg
       endif
     endif
   endif
