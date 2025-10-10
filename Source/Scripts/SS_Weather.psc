@@ -881,12 +881,10 @@ Float Function GetTorchWarmthBonus(Actor wearer)
     return 0.0
   endif
 
-  Light equippedLight = wearer.GetEquippedObject(True) as Light
-  if equippedLight == None
-    equippedLight = wearer.GetEquippedObject(False) as Light
-  endif
+  Int leftHandType = wearer.GetEquippedItemType(1)
+  Int rightHandType = wearer.GetEquippedItemType(0)
 
-  if equippedLight != None
+  if leftHandType == 11 || rightHandType == 11
     return torchBonus
   endif
 
