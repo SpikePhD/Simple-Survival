@@ -291,6 +291,7 @@ Function EvaluateWeather(String source = "Tick")
   Bool locationChanged = (newLocationName != oldLocationName) || (newWorldspaceName != oldWorldspaceName)
   Bool interiorChanged = isInterior != oldInterior
   Bool exitedToExterior = interiorChanged && !isInterior
+  Bool preparednessTierChanged = (preparednessTier != lastPreparednessTier)
 
   if immersionToastsEnabled
     Bool isTriggerSource = True
@@ -328,12 +329,15 @@ Function EvaluateWeather(String source = "Tick")
         lastImmersionToast = combinedMessage
       endif
 
-      String comfortMsg = GetPreparednessToastMessage(preparednessTier)
-      if comfortMsg != "" && comfortMsg != lastTierToast
-        DispatchToast("", comfortMsg, "Immersion")
-        lastTierToast = comfortMsg
-      endif
     endif
+  endif
+
+  if immersionToastsEnabled && preparednessTierChanged
+    String tierToastMessage = GetPreparednessToastMessage(preparednessTier)
+    if tierToastMessage != ""
+      DispatchToast("", tierToastMessage, "Immersion")
+    endif
+    lastTierToast = tierToastMessage
   endif
 
   if sourceIsFastTravel
