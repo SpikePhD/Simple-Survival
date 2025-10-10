@@ -416,34 +416,22 @@ EndFunction
 
 Function LoadHungerState()
   Float nowTime = Utility.GetCurrentGameTime()
-  Int storedValue = HungerStartValue
-  if StorageUtil.HasIntValue(None, HungerKeyLastValue)
-    storedValue = StorageUtil.GetIntValue(None, HungerKeyLastValue)
-  endif
+  Int storedValue = GetStoredInt(HungerKeyLastValue, HungerStartValue)
   storedValue = ClampInt(storedValue, 0, HungerMaxValue)
 
-  lastHit100GameTime = 0.0
-  if StorageUtil.HasFloatValue(None, HungerKeyLastHit100)
-    lastHit100GameTime = StorageUtil.GetFloatValue(None, HungerKeyLastHit100)
-  endif
+  lastHit100GameTime = GetStoredFloat(HungerKeyLastHit100, 0.0)
   if storedValue >= HungerMaxValue
     if lastHit100GameTime <= 0.0
       lastHit100GameTime = nowTime
     endif
   endif
 
-  lastDecayCheckGameTime = 0.0
-  if StorageUtil.HasFloatValue(None, HungerKeyLastDecayCheck)
-    lastDecayCheckGameTime = StorageUtil.GetFloatValue(None, HungerKeyLastDecayCheck)
-  endif
+  lastDecayCheckGameTime = GetStoredFloat(HungerKeyLastDecayCheck, 0.0)
   if lastDecayCheckGameTime <= 0.0
     lastDecayCheckGameTime = nowTime
   endif
 
-  Int storedTier = -1
-  if StorageUtil.HasIntValue(None, HungerKeyLastTier)
-    storedTier = StorageUtil.GetIntValue(None, HungerKeyLastTier)
-  endif
+  Int storedTier = GetStoredInt(HungerKeyLastTier, -1)
 
   SetHungerValue(storedValue, lastHit100GameTime)
 
@@ -489,5 +477,19 @@ Int Function ClampInt(Int value, Int minValue, Int maxValue)
     value = maxValue
   endif
   return value
+EndFunction
+
+Int Function GetStoredInt(String storageKey, Int fallback)
+  if StorageUtil.HasIntValue(None, storageKey)
+    return StorageUtil.GetIntValue(None, storageKey)
+  endif
+  return fallback
+EndFunction
+
+Float Function GetStoredFloat(String storageKey, Float fallback)
+  if StorageUtil.HasFloatValue(None, storageKey)
+    return StorageUtil.GetFloatValue(None, storageKey)
+  endif
+  return fallback
 EndFunction
 
