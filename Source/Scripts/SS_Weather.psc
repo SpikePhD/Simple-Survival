@@ -1124,8 +1124,8 @@ Function EnsureNameBonusCache(Bool forceReload = False)
   endif
 
   if entryCount > 0
-    String[] matches = Utility.CreateStringArray(entryCount)
-    Float[]  values  = Utility.CreateFloatArray(entryCount)
+    String[] matches = new String[entryCount]
+    Float[]  values  = new Float[entryCount]
     Int validCount = 0
     Int index = 0
     while index < entryCount
@@ -1148,8 +1148,8 @@ Function EnsureNameBonusCache(Bool forceReload = False)
     endwhile
 
     if validCount > 0
-      gearNameMatchCache = Utility.CreateStringArray(validCount)
-      gearNameBonusCache = Utility.CreateFloatArray(validCount)
+      gearNameMatchCache = new String[validCount]
+      gearNameBonusCache = new Float[validCount]
       index = 0
       while index < validCount
         gearNameMatchCache[index] = matches[index]
