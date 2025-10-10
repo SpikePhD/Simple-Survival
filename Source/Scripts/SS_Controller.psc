@@ -266,6 +266,9 @@ Function NotifyFoodConsumed(AlchemyItem foodItem)
 EndFunction
 
 Function ApplyDebugFlags()
+  if HungerModule != None
+    HungerModule.ApplyDebugFlags()
+  endif
   if WeatherModule != None
     WeatherModule.ApplyDebugFlags()
   endif
