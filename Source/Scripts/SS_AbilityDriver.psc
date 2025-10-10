@@ -48,32 +48,52 @@ EndFunction
 
 ; ========== Events from controller ==========
 Event OnObjectEquipped(Form akBaseObject, ObjectReference akRef)
-  if akBaseObject as Armor
-    int h = ModEvent.Create("SS_QuickTick")
-    if h
-      ModEvent.PushString(h, "")
-      ModEvent.PushFloat(h, 0.0)
-      ModEvent.Send(h)
-    endif
-    if bTraceLogs
-      Debug.Trace("[SS] Driver: equip detected -> QuickTick sent")
-    endif
+  if ShouldForceRefresh(akBaseObject)
+    TriggerQuickTick("equip", akBaseObject)
   endif
 EndEvent
 
 Event OnObjectUnequipped(Form akBaseObject, ObjectReference akRef)
-  if akBaseObject as Armor
-    int h = ModEvent.Create("SS_QuickTick")
-    if h
-      ModEvent.PushString(h, "")
-      ModEvent.PushFloat(h, 0.0)
-      ModEvent.Send(h)
-    endif
-    if bTraceLogs
-      Debug.Trace("[SS] Driver: unequip detected -> QuickTick sent")
-    endif
+  if ShouldForceRefresh(akBaseObject)
+    TriggerQuickTick("unequip", akBaseObject)
   endif
 EndEvent
+
+Bool Function ShouldForceRefresh(Form equippedObject)
+  if equippedObject == None
+    return False
+  endif
+
+  if equippedObject as Armor
+    return True
+  endif
+
+  if equippedObject as Light
+    return True
+  endif
+
+  return False
+EndFunction
+
+Function TriggerQuickTick(String reason, Form equippedObject)
+  int h = ModEvent.Create("SS_QuickTick")
+  if h
+    ModEvent.PushString(h, "")
+    ModEvent.PushFloat(h, 0.0)
+    ModEvent.Send(h)
+  endif
+
+  if !bTraceLogs
+    return
+  endif
+
+  String objectName = ""
+  if equippedObject != None
+    objectName = equippedObject.GetName()
+  endif
+
+  Debug.Trace("[SS] Driver: " + reason + " detected -> QuickTick sent (" + objectName + ")")
+EndFunction
 
 Event OnColdEvent(Int healthPenaltyPct, Int staminaPenaltyPct, Int magickaPenaltyPct, Int speedPenaltyPct)
   if PlayerRef == None
