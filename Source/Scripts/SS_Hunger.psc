@@ -34,6 +34,7 @@ Bool bTraceLogs = False
 Keyword baseFoodKeyword
 Keyword rawFoodKeyword
 Keyword[] extraFoodKeywords
+Int extraFoodKeywordCount
 Float rawFoodFactor = 0.10
 Int[] foodValueBandMins
 Int[] foodValueBandMaxes
@@ -665,43 +666,48 @@ Function LoadFoodConsumptionConfig()
     rawFoodFactor = 0.0
   endif
 
-  Int extraCount = JsonUtil.PathCount(CFG_PATH, "hunger.food.extraKeywords")
-  if extraCount < 0
-    extraCount = 0
-  endif
-
-  if extraCount <= 0
-    extraFoodKeywords = None
-    return
+  Int configuredCount = JsonUtil.PathCount(CFG_PATH, "hunger.food.extraKeywords")
+  if configuredCount < 0
+    configuredCount = 0
   endif
 
   extraFoodKeywords = None
+  extraFoodKeywordCount = 0
+
+  if configuredCount <= 0
+    return
+  endif
+
+  Int entryLimit = 128
+  Bool hitLimit = False
+  extraFoodKeywords = new Keyword[128]
 
   Int i = 0
-  while i < extraCount
-    if extraFoodKeywords != None && extraFoodKeywords.Length >= 128
-      TraceHunger("Extra food keyword list hit the Papyrus 128 entry limit, ignoring additional entries.")
-      break
-    endif
-
+  while i < configuredCount
     String basePath = "hunger.food.extraKeywords[" + Utility.ToString(i) + "]"
     String keywordName = JsonUtil.GetPathStringValue(CFG_PATH, basePath, "")
     Keyword keywordEntry = ResolveKeyword(keywordName)
 
     if keywordEntry != None
-      if extraFoodKeywords == None
-        extraFoodKeywords = new Keyword[1]
-        extraFoodKeywords[0] = keywordEntry
+      if extraFoodKeywordCount < entryLimit
+        extraFoodKeywords[extraFoodKeywordCount] = keywordEntry
+        extraFoodKeywordCount += 1
       else
-        extraFoodKeywords = extraFoodKeywords + keywordEntry
+        hitLimit = True
+        break
       endif
     endif
 
     i += 1
   endwhile
 
-  if extraFoodKeywords != None && extraFoodKeywords.Length <= 0
+  if (!hitLimit && configuredCount > entryLimit) || hitLimit
+    TraceHunger("Extra food keyword list hit the Papyrus 128 entry limit, ignoring additional entries.")
+  endif
+
+  if extraFoodKeywordCount <= 0
     extraFoodKeywords = None
+    extraFoodKeywordCount = 0
   endif
 
   LoadFoodValueBands()
@@ -805,10 +811,9 @@ Bool Function IsFoodItem(Potion foodItem)
     return True
   endif
 
-  if extraFoodKeywords != None
-    Int count = extraFoodKeywords.Length
+  if extraFoodKeywords != None && extraFoodKeywordCount > 0
     Int i = 0
-    while i < count
+    while i < extraFoodKeywordCount
       Keyword keywordEntry = extraFoodKeywords[i]
       if keywordEntry != None && foodItem.HasKeyword(keywordEntry)
         return True
