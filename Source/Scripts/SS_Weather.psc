@@ -190,6 +190,7 @@ Function EvaluateWeather(String source = "Tick")
 
   ; ---- read config ----
   Bool  coldOn    = GetB("weather.cold.enable", True)
+  Bool  useTierSystem = GetB("penalties.useTierSystem", True)
   Float baseRequirement = ReadBaseRequirement()
   Int regionClass = GetRegionClassification()
   Int weatherClass = GetWeatherClassification()
@@ -231,53 +232,87 @@ Function EvaluateWeather(String source = "Tick")
   LastMagickaPenalty = magickaPenaltyPct
   LastSpeedPenalty   = speedPenaltyPct
   Int preparednessTier = DeterminePreparednessTier(warmth, safeReq)
+  Bool preparednessTierChanged = (preparednessTier != lastPreparednessTier)
+
+  if useTierSystem && preparednessTierChanged
+    Int tierEvent = ModEvent.Create("SS_TierChanged")
+    if tierEvent
+      ModEvent.PushInt(tierEvent, preparednessTier)
+      ModEvent.PushString(tierEvent, source)
+      ModEvent.Send(tierEvent)
+
+      if bTraceLogs
+        Debug.Trace("[SS] Sent SS_TierChanged | tier=" + preparednessTier + " source=" + source)
+      endif
+    endif
+  endif
 
   ; ---- penalties mapping ----
   ; ---- apply or clear via driver ----
   if coldOn
-    Int setColdEventHandle = ModEvent.Create("SS_SetCold")
-    if setColdEventHandle
-      ModEvent.PushInt(setColdEventHandle, healthPenaltyPct)
-      ModEvent.PushInt(setColdEventHandle, staminaPenaltyPct)
-      ModEvent.PushInt(setColdEventHandle, magickaPenaltyPct)
-      ModEvent.PushInt(setColdEventHandle, speedPenaltyPct)
-      ModEvent.PushInt(setColdEventHandle, preparednessTier)
-      ModEvent.Send(setColdEventHandle)
+    int h = ModEvent.Create("SS_SetCold")
+    if h
+      ModEvent.PushInt(h, healthPenaltyPct)
+      ModEvent.PushInt(h, staminaPenaltyPct)
+      ModEvent.PushInt(h, magickaPenaltyPct)
+      ModEvent.PushInt(h, speedPenaltyPct)
+      ModEvent.PushInt(h, preparednessTier)
+      ModEvent.Send(h)
 
       if bDebugEnabled
-        String warmStatusMessage = "[SS] warm=" + warmth + " / req=" + baseRequirement + " + modifiers=" + modifierSum + " => " + safeReq + " | def=" + deficit + " | hpPen=" + healthPenaltyPct + "% spdPen=" + speedPenaltyPct + "%"
+        String debugMsg = "[SS] warm=" + warmth + " / req=" + baseRequirement + " + modifiers=" + modifierSum + " => " + safeReq + " | def=" + deficit + " | hpPen=" + healthPenaltyPct + "% spdPen=" + speedPenaltyPct + "%"
         if bTraceLogs
-          Debug.Trace(warmStatusMessage)
+          Debug.Trace(debugMsg)
         else
-          Debug.Notification(warmStatusMessage)
+          Debug.Notification(msg)
+    if !useTierSystem
+      int h = ModEvent.Create("SS_SetCold")
+      if h
+        ModEvent.PushInt(h, healthPenaltyPct)
+        ModEvent.PushInt(h, staminaPenaltyPct)
+        ModEvent.PushInt(h, magickaPenaltyPct)
+        ModEvent.PushInt(h, speedPenaltyPct)
+        ModEvent.Send(h)
+
+        if bDebugEnabled
+          String msg = "[SS] warm=" + warmth + " / req=" + baseRequirement + " + modifiers=" + modifierSum + " => " + safeReq + " | def=" + deficit + " | hpPen=" + healthPenaltyPct + "% spdPen=" + speedPenaltyPct + "%"
+          if bTraceLogs
+            Debug.Trace(msg)
+          else
+            Debug.Notification(msg)
+          endif
         endif
-      endif
 
       if bTraceLogs
         Debug.Trace("[SS] Sent SS_SetCold | hp=" + healthPenaltyPct + "% st=" + staminaPenaltyPct + "% mg=" + magickaPenaltyPct + "% speed=" + speedPenaltyPct + "% tier=" + preparednessTier)
+        if bTraceLogs
+          Debug.Trace("[SS] Sent SS_SetCold | hp=" + healthPenaltyPct + "% st=" + staminaPenaltyPct + "% mg=" + magickaPenaltyPct + "% speed=" + speedPenaltyPct + "%")
+        endif
       endif
-    endif
 
-    ; optional HP bleed (scaled by relative deficit)
-    if coldTick > 0.0 && deficit > 0.0
-      Float denom = safeReq
-      if denom <= 0.0
-        denom = 1.0
+      ; optional HP bleed (scaled by relative deficit)
+      if coldTick > 0.0 && deficit > 0.0
+        Float denom = safeReq
+        if denom <= 0.0
+          denom = 1.0
+        endif
+        Float scale = deficit / denom
+        p.DamageActorValue("Health", coldTick * scale)
       endif
-      Float scale = deficit / denom
-      p.DamageActorValue("Health", coldTick * scale)
     endif
 
     ; Cold resource drain disabled for linear penalty testing
   else
-    Int clearColdHandle = ModEvent.Create("SS_ClearCold")
-    if clearColdHandle
-      ModEvent.Send(clearColdHandle)
-      if bDebugEnabled
-        Debug.Notification("[SS] cold OFF -> clear penalties")
-      endif
-      if bTraceLogs
-        Debug.Trace("[SS] Sent SS_ClearCold")
+    if !useTierSystem
+      int h2 = ModEvent.Create("SS_ClearCold")
+      if h2
+        ModEvent.Send(h2)
+        if bDebugEnabled
+          Debug.Notification("[SS] cold OFF -> clear penalties")
+        endif
+        if bTraceLogs
+          Debug.Trace("[SS] Sent SS_ClearCold")
+        endif
       endif
     endif
     LastHealthPenalty  = 0
@@ -290,8 +325,6 @@ Function EvaluateWeather(String source = "Tick")
   Bool locationChanged = (newLocationName != oldLocationName) || (newWorldspaceName != oldWorldspaceName)
   Bool interiorChanged = isInterior != oldInterior
   Bool exitedToExterior = interiorChanged && !isInterior
-  Bool preparednessTierChanged = (preparednessTier != lastPreparednessTier)
-
   if immersionToastsEnabled
     Bool isTriggerSource = True
     if source == ""
@@ -829,12 +862,45 @@ Float Function GetPlayerWarmthScoreV1(Actor p, Float perPiece)
   total += ComputePieceWarmth(p, 0x00000008, kBaseWarmthHands)
   total += ComputePieceWarmth(p, 0x00000080, kBaseWarmthFeet)
   total += ComputePieceWarmth(p, 0x00010000, kBaseWarmthCloak)
+  total += GetTorchWarmthBonus(p)
 
   if perPiece > 0.0 && perPiece != 100.0
     total *= (perPiece / 100.0)
   endif
 
+  if p.IsSwimming()
+    Float swimMalus = GetF("weather.cold.swimWarmthMalus", 0.0)
+    if swimMalus > 0.0
+      swimMalus = 0.0
+    elseif swimMalus < -500.0
+      swimMalus = -500.0
+    endif
+    total += swimMalus
+  endif
+
   return total
+EndFunction
+
+Float Function GetTorchWarmthBonus(Actor wearer)
+  if wearer == None
+    return 0.0
+  endif
+
+  Float torchBonus = GetF("weather.cold.torchWarmthBonus", 0.0)
+  if torchBonus <= 0.0
+    return 0.0
+  endif
+
+  Light equippedLight = wearer.GetEquippedObject(True) as Light
+  if equippedLight == None
+    equippedLight = wearer.GetEquippedObject(False) as Light
+  endif
+
+  if equippedLight != None
+    return torchBonus
+  endif
+
+  return 0.0
 EndFunction
 
 Armor Function GetHeadGear(Actor wearer)
@@ -1039,6 +1105,11 @@ Function InitConfigDefaults()
     JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.autoWarmthPerPiece", 100.0)
   endif
 
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.torchWarmthBonus", -9999.0)
+  if f == -9999.0
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.torchWarmthBonus", 30.0)
+  endif
+
   ; additive weather modifiers
   f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.baseRequirement", -9999.0)
   if f == -9999.0
@@ -1095,6 +1166,16 @@ Function InitConfigDefaults()
     JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.interiorAdjust", -50.0)
   endif
 
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.swimWarmthMalus", -9999.0)
+  if f == -9999.0
+    JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.swimWarmthMalus", 0.0)
+  endif
+
+  Float obsoleteSwimMultiplier = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.swimWarmthMultiplier", -9999.0)
+  if obsoleteSwimMultiplier != -9999.0
+    JsonUtil.ClearPath(CFG_PATH, "weather.cold.swimWarmthMultiplier")
+  endif
+
   f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.nightMultiplier", -9999.0)
   if f == -9999.0
     JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.nightMultiplier", 1.25)
@@ -1115,6 +1196,101 @@ Function InitConfigDefaults()
   f = JsonUtil.GetPathFloatValue(CFG_PATH, "weather.cold.tick", -9999.0)
   if f == -9999.0
     JsonUtil.SetPathFloatValue(CFG_PATH, "weather.cold.tick", 0.0)
+  endif
+
+  ; penalties (tier defaults)
+  i = JsonUtil.GetPathIntValue(CFG_PATH, "penalties.useTierSystem", -9999)
+  if i == -9999
+    JsonUtil.SetPathIntValue(CFG_PATH, "penalties.useTierSystem", 1)
+  endif
+
+  i = JsonUtil.GetPathIntValue(CFG_PATH, "penalties.tier4.bonusMaxPct", -9999)
+  if i == -9999
+    JsonUtil.SetPathIntValue(CFG_PATH, "penalties.tier4.bonusMaxPct", 10)
+  endif
+  i = JsonUtil.GetPathIntValue(CFG_PATH, "penalties.tier4.bonusRegenPct", -9999)
+  if i == -9999
+    JsonUtil.SetPathIntValue(CFG_PATH, "penalties.tier4.bonusRegenPct", 10)
+  endif
+
+  i = JsonUtil.GetPathIntValue(CFG_PATH, "penalties.tier3.speedPct", -9999)
+  if i == -9999
+    JsonUtil.SetPathIntValue(CFG_PATH, "penalties.tier3.speedPct", 0)
+  endif
+  i = JsonUtil.GetPathIntValue(CFG_PATH, "penalties.tier3.regenStop", -9999)
+  if i == -9999
+    JsonUtil.SetPathIntValue(CFG_PATH, "penalties.tier3.regenStop", 0)
+  endif
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "penalties.tier3.damagePerSec", -9999.0)
+  if f == -9999.0
+    JsonUtil.SetPathFloatValue(CFG_PATH, "penalties.tier3.damagePerSec", 0.0)
+  endif
+  i = JsonUtil.GetPathIntValue(CFG_PATH, "penalties.tier3.floorPct", -9999)
+  if i == -9999
+    JsonUtil.SetPathIntValue(CFG_PATH, "penalties.tier3.floorPct", 100)
+  endif
+
+  i = JsonUtil.GetPathIntValue(CFG_PATH, "penalties.tier2.speedPct", -9999)
+  if i == -9999
+    JsonUtil.SetPathIntValue(CFG_PATH, "penalties.tier2.speedPct", 0)
+  endif
+  i = JsonUtil.GetPathIntValue(CFG_PATH, "penalties.tier2.regenStop", -9999)
+  if i == -9999
+    JsonUtil.SetPathIntValue(CFG_PATH, "penalties.tier2.regenStop", 0)
+  endif
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "penalties.tier2.damagePerSec", -9999.0)
+  if f == -9999.0
+    JsonUtil.SetPathFloatValue(CFG_PATH, "penalties.tier2.damagePerSec", 5.0)
+  endif
+  i = JsonUtil.GetPathIntValue(CFG_PATH, "penalties.tier2.floorPct", -9999)
+  if i == -9999
+    JsonUtil.SetPathIntValue(CFG_PATH, "penalties.tier2.floorPct", 90)
+  endif
+  i = JsonUtil.GetPathIntValue(CFG_PATH, "penalties.tier2.maxLossPct", -9999)
+  if i == -9999
+    JsonUtil.SetPathIntValue(CFG_PATH, "penalties.tier2.maxLossPct", 10)
+  endif
+
+  i = JsonUtil.GetPathIntValue(CFG_PATH, "penalties.tier1.speedPct", -9999)
+  if i == -9999
+    JsonUtil.SetPathIntValue(CFG_PATH, "penalties.tier1.speedPct", -10)
+  endif
+  i = JsonUtil.GetPathIntValue(CFG_PATH, "penalties.tier1.regenStop", -9999)
+  if i == -9999
+    JsonUtil.SetPathIntValue(CFG_PATH, "penalties.tier1.regenStop", 0)
+  endif
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "penalties.tier1.damagePerSec", -9999.0)
+  if f == -9999.0
+    JsonUtil.SetPathFloatValue(CFG_PATH, "penalties.tier1.damagePerSec", 10.0)
+  endif
+  i = JsonUtil.GetPathIntValue(CFG_PATH, "penalties.tier1.floorPct", -9999)
+  if i == -9999
+    JsonUtil.SetPathIntValue(CFG_PATH, "penalties.tier1.floorPct", 75)
+  endif
+  i = JsonUtil.GetPathIntValue(CFG_PATH, "penalties.tier1.maxLossPct", -9999)
+  if i == -9999
+    JsonUtil.SetPathIntValue(CFG_PATH, "penalties.tier1.maxLossPct", 25)
+  endif
+
+  i = JsonUtil.GetPathIntValue(CFG_PATH, "penalties.tier0.speedPct", -9999)
+  if i == -9999
+    JsonUtil.SetPathIntValue(CFG_PATH, "penalties.tier0.speedPct", -25)
+  endif
+  i = JsonUtil.GetPathIntValue(CFG_PATH, "penalties.tier0.regenStop", -9999)
+  if i == -9999
+    JsonUtil.SetPathIntValue(CFG_PATH, "penalties.tier0.regenStop", 1)
+  endif
+  f = JsonUtil.GetPathFloatValue(CFG_PATH, "penalties.tier0.damagePerSec", -9999.0)
+  if f == -9999.0
+    JsonUtil.SetPathFloatValue(CFG_PATH, "penalties.tier0.damagePerSec", 15.0)
+  endif
+  i = JsonUtil.GetPathIntValue(CFG_PATH, "penalties.tier0.floorPct", -9999)
+  if i == -9999
+    JsonUtil.SetPathIntValue(CFG_PATH, "penalties.tier0.floorPct", 50)
+  endif
+  i = JsonUtil.GetPathIntValue(CFG_PATH, "penalties.tier0.maxLossPct", -9999)
+  if i == -9999
+    JsonUtil.SetPathIntValue(CFG_PATH, "penalties.tier0.maxLossPct", 50)
   endif
 
   ; debug toggles

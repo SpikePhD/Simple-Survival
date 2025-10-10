@@ -5,6 +5,7 @@
       "safeThreshold": 0.0,
       "baseRequirement": 200.0,
       "autoWarmthPerPiece": 100.0,
+      "torchWarmthBonus": 30.0,
       "region": {
         "pleasant": 0.0,
         "cloudy": 30.0,
