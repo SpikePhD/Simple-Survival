@@ -232,25 +232,6 @@ Function EvaluateWeather(String source = "Tick")
   Float autoPer   = GetF("weather.cold.autoWarmthPerPiece", 100.0)
   Float coldTick  = GetF("weather.cold.tick", 0.0) ; optional hp bleed per tick at max deficit
 
-Int entryCount = matches.Length
-if entryCount <= 0 || values.Length <= 0
-  ; No config present -> keep cache invalid but harmless
-  gearNameCacheValid = False
-  gearNameCacheCount = 0
-  gearNameMatchCache = None
-  gearNameBonusCache = None
-  return
-endif
-
-if values.Length != entryCount
-  ; Mismatched lengths -> disable cache safely
-  gearNameCacheValid = False
-  gearNameCacheCount = 0
-  gearNameMatchCache = None
-  gearNameBonusCache = None
-  return
-endif
-
   EnsureNameBonusCache(ShouldForceNameBonusReload(source))
 
   LastBaseRequirement = baseRequirement
@@ -1043,7 +1024,10 @@ Float Function GetNameBonusForItem(Form akItem)
     if n == None
         return 0.0
     endif
-    n = StringUtil.Trim(n)
+    if n == ""
+        return 0.0
+    endif
+    n = TrimWhitespace(n)
     if n == ""
         return 0.0
     endif
@@ -1053,12 +1037,18 @@ Float Function GetNameBonusForItem(Form akItem)
 
     Float acc = 0.0
     int i = 0
+    String pat = ""
+    String trimmedPat = ""
+    String patLower = ""
     while i < gearNameCacheCount
-        String pat = gearNameMatchCache[i]
-        if pat != None && pat != ""
-            String patLower = StringUtil.ToLower(pat)
-            if StringUtil.Find(nameLower, patLower) != -1
-                acc += gearNameBonusCache[i]
+        pat = gearNameMatchCache[i]
+        if pat != None
+            trimmedPat = TrimWhitespace(pat)
+            if trimmedPat != ""
+                patLower = StringUtil.ToLower(trimmedPat)
+                if StringUtil.Find(nameLower, patLower) != -1
+                    acc += gearNameBonusCache[i]
+                endif
             endif
         endif
         i += 1
@@ -1220,55 +1210,30 @@ Function EnsureNameBonusCache(bool forceReload = False)
 EndFunction
 
 Bool Function ShouldForceNameBonusReload(String source)
-  if source == ""
-    return False
-  endif
-
-  if SourceIncludes(source, "MCM")
-    return True
-  endif
-  if SourceIncludes(source, "Refresh")
-    return True
-  endif
-  if SourceIncludes(source, "Init")
-    return True
-  endif
-  if SourceIncludes(source, "LoadGame")
-    return True
-  endif
-  if SourceIncludes(source, "QuickTick")
-    return True
-  endif
-  if SourceIncludes(source, "FastTick")
-    return True
-  endif
-
-  return False
-EndFunction
-
-String Function NormalizeWarmthName(String rawName)
-  if rawName == ""
-    return rawName
-  endif
-
-  String uppercaseChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-  String lowercaseChars = "abcdefghijklmnopqrstuvwxyz"
-  Int nameLength = StringUtil.GetLength(rawName)
-  Int index = 0
-  String normalizedName = ""
-  while index < nameLength
-    String currentChar = StringUtil.GetNthChar(rawName, index)
-    Int uppercaseIndex = StringUtil.Find(uppercaseChars, currentChar)
-    if uppercaseIndex >= 0
-      String lowerChar = StringUtil.GetNthChar(lowercaseChars, uppercaseIndex)
-      normalizedName += lowerChar
-    else
-      normalizedName += currentChar
+    if source == ""
+        return False
     endif
-    index += 1
-  endwhile
 
-  return normalizedName
+    if SourceIncludes(source, "MCM")
+        return True
+    endif
+    if SourceIncludes(source, "Refresh")
+        return True
+    endif
+    if SourceIncludes(source, "Init")
+        return True
+    endif
+    if SourceIncludes(source, "LoadGame")
+        return True
+    endif
+    if SourceIncludes(source, "QuickTick")
+        return True
+    endif
+    if SourceIncludes(source, "FastTick")
+        return True
+    endif
+
+    return False
 EndFunction
 
 ; =======================
