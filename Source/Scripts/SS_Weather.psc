@@ -839,6 +839,38 @@ Bool Function IsWhitespaceChar(String charValue)
   return False
 EndFunction
 
+String Function NormalizeWarmthName(String value)
+  String trimmed = TrimWhitespace(value)
+  if trimmed == ""
+    return ""
+  endif
+
+  String lower = trimmed.ToLower()
+  Int totalLength = StringUtil.GetLength(lower)
+  if totalLength <= 0
+    return ""
+  endif
+
+  String normalized = ""
+  Bool lastWasSpace = False
+  Int idx = 0
+  while idx < totalLength
+    String ch = StringUtil.GetNthChar(lower, idx)
+    if IsWhitespaceChar(ch)
+      if !lastWasSpace
+        normalized += " "
+        lastWasSpace = True
+      endif
+    else
+      normalized += ch
+      lastWasSpace = False
+    endif
+    idx += 1
+  endwhile
+
+  return normalized
+EndFunction
+
 Int Function ComputePenaltyPercent(Float deficit, Float safeRequirement, Int maxPenalty)
   if deficit <= 0.0
     return 0
@@ -1011,63 +1043,44 @@ Float Function ComputePieceWarmth(Actor wearer, Int slotMask, Float baseWarmth, 
 EndFunction
 
 Float Function GetNameBonusForItem(Form akItem)
-    if akItem == None
-        return 0.0
-    endif
+  if akItem == None
+    return 0.0
+  endif
 
-    EnsureNameBonusCache(False)
-    if !gearNameCacheValid || gearNameCacheCount <= 0
-        return 0.0
-    endif
+  EnsureNameBonusCache(False)
+  if !gearNameCacheValid || gearNameCacheCount <= 0
+    return 0.0
+  endif
 
-    String n = akItem.GetName()
-    if n == ""
-        return 0.0
-    endif
-    if n == ""
-        return 0.0
-    endif
-    n = TrimWhitespace(n)
-    if n == ""
-        return 0.0
-    endif
+  String n = TrimWhitespace(akItem.GetName())
+  if n == ""
+    return 0.0
+  endif
 
-    ; case-insensitive substring match (adjust later if you add token/boundary mode)
-    String nameLower = NormalizeWarmthName(n)
+  ; case-insensitive substring match (adjust later if you add token/boundary mode)
+  String nameLower = NormalizeWarmthName(n)
 
-    Float acc = 0.0
-    int i = 0
-    String pat = ""
-    String trimmedPat = ""
-    String patLower = ""
-    while i < gearNameCacheCount
-        pat = gearNameMatchCache[i]
-        if pat != None
-            trimmedPat = TrimWhitespace(pat)
-            if trimmedPat != ""
-                patLower = StringUtil.ToLower(trimmedPat)
-                if StringUtil.Find(nameLower, patLower) != -1
-                    acc += gearNameBonusCache[i]
-                endif
-        String pat = gearNameMatchCache[i]
-        String trimmedPat = TrimWhitespace(pat)
-        if trimmedPat != ""
-            String patLower = StringUtil.ToLower(trimmedPat)
-            String patLower = NormalizeWarmthName(trimmedPat)
-            if StringUtil.Find(nameLower, patLower) != -1
-                acc += gearNameBonusCache[i]
-            endif
-        endif
-        i += 1
-    endWhile
-
-    ; optional per-piece cap
-    if acc < 0.0
-        acc = 0.0
-    elseif acc > 60.0
-        acc = 60.0
+  Float acc = 0.0
+  Int i = 0
+  while i < gearNameCacheCount
+    String pat = gearNameMatchCache[i]
+    String trimmedPat = TrimWhitespace(pat)
+    if trimmedPat != ""
+      String patLower = NormalizeWarmthName(trimmedPat)
+      if StringUtil.Find(nameLower, patLower) != -1
+        acc += gearNameBonusCache[i]
+      endif
     endif
-    return acc
+    i += 1
+  endWhile
+
+  ; optional per-piece cap
+  if acc < 0.0
+    acc = 0.0
+  elseif acc > 60.0
+    acc = 60.0
+  endif
+  return acc
 EndFunction
 
 Float Function GetLegacyWarmthBonus(String lowerName)
@@ -1220,68 +1233,6 @@ Bool Function ShouldForceNameBonusReload(String source)
     if source == ""
         return False
     endif
-
-    if SourceIncludes(source, "MCM")
-        return True
-    endif
-    if SourceIncludes(source, "Refresh")
-        return True
-    endif
-    if SourceIncludes(source, "Init")
-        return True
-    endif
-    if SourceIncludes(source, "LoadGame")
-        return True
-    endif
-    if SourceIncludes(source, "QuickTick")
-        return True
-    endif
-    if SourceIncludes(source, "FastTick")
-        return True
-    endif
-
-    return False
-EndFunction
-
-Bool Function IsWhitespaceChar(String ch)
-  if ch == " "
-    return True
-  endif
-  if ch == "\t"
-    return True
-  endif
-  if ch == "\n"
-    return True
-  endif
-  if ch == "\r"
-    return True
-  endif
-  return False
-EndFunction
-
-String Function TrimWhitespace(String value)
-  if value == ""
-    return value
-  endif
-
-  Int startIndex = 0
-  Int endIndex = StringUtil.GetLength(value) - 1
-
-  while startIndex <= endIndex && IsWhitespaceChar(StringUtil.GetNthChar(value, startIndex))
-    startIndex += 1
-  endwhile
-
-  while endIndex >= startIndex && IsWhitespaceChar(StringUtil.GetNthChar(value, endIndex))
-    endIndex -= 1
-  endwhile
-
-  if startIndex > endIndex
-    return ""
-  endif
-
-  Int length = endIndex - startIndex + 1
-  return StringUtil.SubString(value, startIndex, length)
-EndFunction
 
     if SourceIncludes(source, "MCM")
         return True
