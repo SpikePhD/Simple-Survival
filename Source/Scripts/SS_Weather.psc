@@ -8,6 +8,8 @@ Import StringUtil
 Import Math
 Import SS_JsonHelpers
 String Property CFG_PATH = "Data\\SKSE\\Plugins\\SS\\config.json" Auto
+String[] matches = SS_JsonHelpers.GetStringArraySafe(CFG_PATH, "gear.nameBonuses.matches")
+Float[]  values  = SS_JsonHelpers.GetFloatArraySafe(CFG_PATH,  "gear.nameBonuses.values")
 
 ; =======================
 ; Ability / Forms / Keywords
@@ -223,6 +225,25 @@ Function EvaluateWeather(String source = "Tick")
   Float modifierSum = safeReq - baseRequirement
   Float autoPer   = GetF("weather.cold.autoWarmthPerPiece", 100.0)
   Float coldTick  = GetF("weather.cold.tick", 0.0) ; optional hp bleed per tick at max deficit
+
+Int entryCount = matches.Length
+if entryCount <= 0 || values.Length <= 0
+  ; No config present -> keep cache invalid but harmless
+  gearNameCacheValid = False
+  gearNameCacheCount = 0
+  gearNameMatchCache = None
+  gearNameBonusCache = None
+  return
+endif
+
+if values.Length != entryCount
+  ; Mismatched lengths -> disable cache safely
+  gearNameCacheValid = False
+  gearNameCacheCount = 0
+  gearNameMatchCache = None
+  gearNameBonusCache = None
+  return
+endif
 
   EnsureNameBonusCache(ShouldForceNameBonusReload(source))
 

@@ -1,40 +1,35 @@
-; =========================
-; SS_JsonHelpers.psc (new)
-; Purpose: Safe getters for arrays from PapyrusUtil JSON.
-; Requirements: SKSE64, PapyrusUtil SE 4.4+ (psc stubs on compile path)
-; Attach: None (utility). Import where needed.
-Scriptname SS_JsonHelpers
-Import JsonUtil
+Scriptname SS_JsonHelpers Hidden
 
-String[] Function GetStringArraySafe(String file, String jpath) Global
-    String[] arr = None
-    If JsonUtil.CanResolvePath(file, jpath)
-        arr = JsonUtil.PathStringElements(file, jpath)
-    EndIf
-    If arr == None
-        arr = Utility.CreateStringArray(0)
-    EndIf
-    Return arr
+; Returns [] (length 0) if jsonPath is missing/empty.
+String[] Function GetStringArraySafe(String filePath, String jsonPath) Global
+	int n = JsonUtil.PathCount(filePath, jsonPath)
+	if n <= 0
+		return Utility.CreateStringArray(0)
+	endif
+
+	String[] out = Utility.CreateStringArray(n)
+	int i = 0
+	while i < n
+		String idxPath = jsonPath + "[" + ("" + i) + "]"
+		out[i] = JsonUtil.GetPathStringValue(filePath, idxPath, "")
+		i += 1
+	endWhile
+	return out
 EndFunction
 
-Float[] Function GetFloatArraySafe(String file, String jpath) Global
-    Float[] arr = None
-    If JsonUtil.CanResolvePath(file, jpath)
-        arr = JsonUtil.PathFloatElements(file, jpath)
-    EndIf
-    If arr == None
-        arr = Utility.CreateFloatArray(0)
-    EndIf
-    Return arr
-EndFunction
+; Returns [] (length 0) if jsonPath is missing/empty.
+Float[] Function GetFloatArraySafe(String filePath, String jsonPath) Global
+	int n = JsonUtil.PathCount(filePath, jsonPath)
+	if n <= 0
+		return Utility.CreateFloatArray(0)
+	endif
 
-Int[] Function GetIntArraySafe(String file, String jpath) Global
-    Int[] arr = None
-    If JsonUtil.CanResolvePath(file, jpath)
-        arr = JsonUtil.PathIntElements(file, jpath)
-    EndIf
-    If arr == None
-        arr = Utility.CreateIntArray(0)
-    EndIf
-    Return arr
+	Float[] out = Utility.CreateFloatArray(n)
+	int i = 0
+	while i < n
+		String idxPath = jsonPath + "[" + ("" + i) + "]"
+		out[i] = JsonUtil.GetPathFloatValue(filePath, idxPath, 0.0)
+		i += 1
+	endWhile
+	return out
 EndFunction
