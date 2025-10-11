@@ -233,7 +233,7 @@ Function EvaluateWeather(String source = "Tick")
   Bool immersionToastsEnabled = IsImmersionToastsEnabled()
 
   ; ---- warmth/deficit from gear ----
-  Float warmth = GetPlayerWarmthScoreV1(p, autoPer)
+  Float warmth = GetPlayerWarmthScoreV1(p, autoPer, source)
   LastWarmth = warmth
   Float deficit = 0.0
   if warmth < safeReq
@@ -866,12 +866,12 @@ Float Function GetLastWarmth()
   return LastWarmth
 EndFunction
 
-Float Function GetPlayerWarmthScoreV1(Actor p, Float perPiece)
+Float Function GetPlayerWarmthScoreV1(Actor p, Float perPiece, String source = "")
   if p == None
     return 0.0
   endif
 
-  EnsureNameBonusCache(False)
+  EnsureNameBonusCache(ShouldForceNameBonusReload(source))
 
   Float total = 0.0
   total += ComputePieceWarmth(p, 0x00000004, kBaseWarmthBody)
@@ -1149,6 +1149,10 @@ Function EnsureNameBonusCache(Bool forceReload = False)
 
     String[] tempKeys = Utility.CreateStringArray(pairCount)
     Float[]  tempVals = Utility.CreateFloatArray(pairCount)
+    if tempKeys == None || tempVals == None
+      _cacheReady = False
+      return
+    endif
     Int validPairCount = 0
     Int pairIndex = 0
     while pairIndex < pairCount
@@ -1191,6 +1195,10 @@ Function EnsureNameBonusCache(Bool forceReload = False)
     if entryCount > 0
       String[] matches = Utility.CreateStringArray(entryCount)
       Float[]  values  = Utility.CreateFloatArray(entryCount)
+      if matches == None || values == None
+        _cacheReady = False
+        return
+      endif
       Int validCount = 0
       Int index = 0
       while index < entryCount
@@ -1224,6 +1232,13 @@ Function EnsureNameBonusCache(Bool forceReload = False)
         gearNameCacheCount = validCount
       endif
     endif
+  endif
+
+  if _nameBonusKeys == None
+    _nameBonusKeys = Utility.CreateStringArray(0)
+  endif
+  if _nameBonusVals == None
+    _nameBonusVals = Utility.CreateFloatArray(0)
   endif
 
   _cacheReady = True
