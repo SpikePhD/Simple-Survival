@@ -278,16 +278,18 @@ Int Function DetermineHungerTier(Int hungerValue)
     normalized = 100.0
   endif
 
-  if normalized >= HungerTier4Min
-    return 4
-  elseif normalized >= HungerTier3Min
-    return 3
-  elseif normalized >= HungerTier2Min
-    return 2
-  elseif normalized >= HungerTier1Min
+  if normalized >= 100.0
+    return 0
+  elseif normalized >= 75.0
     return 1
+  elseif normalized >= 50.0
+    return 2
+  elseif normalized >= 25.0
+    return 3
+  elseif normalized >= 1.0
+    return 4
   endif
-  return 0
+  return 5
 EndFunction
 
 Function HandleHungerTierChanged(Int newTier, Int previousTier)
@@ -367,19 +369,22 @@ String Function GetHungerTierToastMessage(Int tier)
   String tierName = ""
   String tierLine = ""
 
-  if tier == 4
+  if tier == 0
     tierName = "Well Fed"
     tierLine = "I feel strong and nourished."
-  elseif tier == 3
+  elseif tier == 1
     tierName = "Satisfied"
     tierLine = "I am content."
   elseif tier == 2
+    tierName = "Peckish"
+    tierLine = "I could eat something."
+  elseif tier == 3
     tierName = "Hungry"
     tierLine = "My stomach growls."
-  elseif tier == 1
+  elseif tier == 4
     tierName = "Starving"
     tierLine = "Weakness creeps in, I need food."
-  elseif tier == 0
+  elseif tier == 5
     tierName = "Famished"
     tierLine = "I am famished, my body fails me!"
   endif
@@ -397,6 +402,14 @@ String Function GetHungerTierToastMessage(Int tier)
   endif
 
   return tierLine
+EndFunction
+
+Int Function GetCurrentHungerTier() Global
+  return lastHungerTier
+EndFunction
+
+Int Function GetCurrentHungerPoints() Global
+  return lastHungerValue
 EndFunction
 
 Function InitHungerConfigDefaults()
