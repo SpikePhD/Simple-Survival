@@ -812,6 +812,10 @@ Keyword[] Function AppendKeywordToArray(Keyword[] sourceArray, Keyword newKeywor
     return firstEntry
   endif
 
+  Keyword[] appendEntry = new Keyword[1]
+  appendEntry[0] = newKeyword
+
+  return sourceArray + appendEntry
   return sourceArray + newKeyword
 EndFunction
 
