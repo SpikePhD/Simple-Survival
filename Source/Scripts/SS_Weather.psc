@@ -159,7 +159,7 @@ Event OnInit()
   bRunning = True
   ; instant reactions on gear changes
   RegisterForModEvent("SS_QuickTick", "OnQuickTick")
-  EvaluateWeather("Init")
+  QueueInitialEvaluate("Init")
 EndEvent
 
 Event OnPlayerLoadGame()
@@ -167,7 +167,7 @@ Event OnPlayerLoadGame()
   ApplyDebugFlags()
   EnsurePlayerHasAbility()
   bRunning = True
-  EvaluateWeather("OnPlayerLoadGame")
+  QueueInitialEvaluate("OnPlayerLoadGame")
 EndEvent
 
 Function EvaluateWeather(String source = "Tick")
@@ -1564,6 +1564,14 @@ Event OnUpdate()
     return
   endif
 
+  if !_cacheReady
+    EnsureNameBonusCache(False)
+    if !_cacheReady
+      RegisterForSingleUpdate(0.5)
+      return
+    endif
+  endif
+
   bRefreshQueued = False
   String source = queuedSource
   queuedSource = ""
@@ -1574,6 +1582,23 @@ Event OnUpdate()
 
   EvaluateWeather(source)
 EndEvent
+
+Function QueueInitialEvaluate(String source)
+  if source == ""
+    source = "Startup"
+  endif
+
+  if queuedSource != ""
+    if !SourceIncludes(queuedSource, source)
+      queuedSource = queuedSource + "|" + source
+    endif
+  else
+    queuedSource = source
+  endif
+
+  bRefreshQueued = True
+  RegisterForSingleUpdate(0.5)
+EndFunction
 
 Float Function GetMinRefreshGapSeconds()
   Float configured = GetF("weather.cold.minRefreshGapSeconds", kMinRefreshGapSeconds)
