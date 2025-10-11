@@ -15,7 +15,9 @@ Int _optOverviewEnvWarmth
 Int _optOverviewPlayerWarmth
 Int _optOverviewStatus
 Int _optOverviewHungerHeader
-Int _optOverviewHungerStub
+Int _optOverviewHungerMax
+Int _optOverviewHungerCurrent
+Int _optOverviewHungerStatus
 Int _optOverviewRestHeader
 Int _optOverviewRestStub
 Int _optWeatherHeader
@@ -81,6 +83,9 @@ String _overviewCurrentWeatherDisplay = "--"
 String _overviewEnvWarmthDisplay = "0"
 String _overviewPlayerWarmthDisplay = "0"
 String _overviewStatusDisplay = "--"
+String _overviewHungerMaxDisplay = "100"
+String _overviewHungerPointsDisplay = "0"
+String _overviewHungerStatusDisplay = "--"
 
 ; ----------------------------
 ; MCM lifecycle
@@ -103,7 +108,9 @@ Event OnPageReset(String a_page)
   _optOverviewPlayerWarmth = 0
   _optOverviewStatus = 0
   _optOverviewHungerHeader = 0
-  _optOverviewHungerStub = 0
+  _optOverviewHungerMax = 0
+  _optOverviewHungerCurrent = 0
+  _optOverviewHungerStatus = 0
   _optOverviewRestHeader = 0
   _optOverviewRestStub = 0
   _optWarmthReadout = 0
@@ -114,19 +121,21 @@ Event OnPageReset(String a_page)
     _optOverviewWeatherHeader = AddHeaderOption("Weather")
     _optOverviewAreaClimate = AddTextOption("Area Climate", _overviewAreaClimateDisplay)
     _optOverviewCurrentWeather = AddTextOption("Current Weather", _overviewCurrentWeatherDisplay)
-    _optOverviewEnvWarmth = AddTextOption("Environmental Warmth Score", _overviewEnvWarmthDisplay)
+    _optOverviewEnvWarmth = AddTextOption("Environmental Score", _overviewEnvWarmthDisplay)
     _optOverviewPlayerWarmth = AddTextOption("Player Warmth Score", _overviewPlayerWarmthDisplay)
     _optOverviewStatus = AddTextOption("Status", _overviewStatusDisplay)
 
     AddEmptyOption()
 
     _optOverviewHungerHeader = AddHeaderOption("Hunger")
-    _optOverviewHungerStub = AddTextOption("Status", "Coming soon")
+    _optOverviewHungerMax = AddTextOption("Maximum Hunger Points", _overviewHungerMaxDisplay)
+    _optOverviewHungerCurrent = AddTextOption("Player Hunger Points", _overviewHungerPointsDisplay)
+    _optOverviewHungerStatus = AddTextOption("Status", _overviewHungerStatusDisplay)
 
     AddEmptyOption()
 
     _optOverviewRestHeader = AddHeaderOption("Rest")
-    _optOverviewRestStub = AddTextOption("Status", "Coming soon")
+    _optOverviewRestStub = AddTextOption("Status", "Coming Soon")
 
   ElseIf a_page == "Weather"
     _optWeatherHeader = AddHeaderOption("Cold Mechanics")
@@ -449,7 +458,7 @@ Event OnOptionHighlight(Int a_option)
     RefreshWarmthReadout()
   ElseIf (_optPenaltyReadout != 0 && a_option == _optPenaltyReadout)
     RefreshPenaltyReadout()
-  ElseIf ((_optOverviewAreaClimate != 0 && a_option == _optOverviewAreaClimate) || (_optOverviewCurrentWeather != 0 && a_option == _optOverviewCurrentWeather) || (_optOverviewEnvWarmth != 0 && a_option == _optOverviewEnvWarmth) || (_optOverviewPlayerWarmth != 0 && a_option == _optOverviewPlayerWarmth) || (_optOverviewStatus != 0 && a_option == _optOverviewStatus))
+  ElseIf ((_optOverviewAreaClimate != 0 && a_option == _optOverviewAreaClimate) || (_optOverviewCurrentWeather != 0 && a_option == _optOverviewCurrentWeather) || (_optOverviewEnvWarmth != 0 && a_option == _optOverviewEnvWarmth) || (_optOverviewPlayerWarmth != 0 && a_option == _optOverviewPlayerWarmth) || (_optOverviewStatus != 0 && a_option == _optOverviewStatus) || (_optOverviewHungerMax != 0 && a_option == _optOverviewHungerMax) || (_optOverviewHungerCurrent != 0 && a_option == _optOverviewHungerCurrent) || (_optOverviewHungerStatus != 0 && a_option == _optOverviewHungerStatus) || (_optOverviewRestStub != 0 && a_option == _optOverviewRestStub))
     RefreshOverviewReadout()
   EndIf
 EndEvent
@@ -466,6 +475,12 @@ Function UpdateOverviewCache()
   _overviewCurrentWeatherDisplay = "--"
 
   Int preparednessTier = DeterminePreparednessTierLocal(_lastWarmthValue, _lastSafeRequirementValue)
+  Int hungerMax = GetI("hunger.max", 100)
+  if hungerMax <= 0
+    hungerMax = 100
+  endif
+  Int hungerPoints = hungerMax
+  Int hungerTier = DetermineHungerTierLocal(hungerPoints, hungerMax)
 
   SS_Controller controller = None
   If SS_CoreQuest != None
@@ -476,6 +491,8 @@ Function UpdateOverviewCache()
     Int regionClass = controller.GetLastRegionClass()
     Int weatherClass = controller.GetLastWeatherClass()
     Int cachedTier = controller.GetLastPreparednessTier()
+    Int controllerHunger = controller.LastHungerValue
+    Int controllerHungerTier = controller.LastHungerTierValue
     If regionClass >= 0
       _overviewAreaClimateDisplay = ClassToLabel(regionClass)
     EndIf
@@ -485,11 +502,25 @@ Function UpdateOverviewCache()
     If cachedTier >= 0
       preparednessTier = cachedTier
     EndIf
+    if controllerHunger < 0
+      controllerHunger = 0
+    elseif controllerHunger > hungerMax
+      controllerHunger = hungerMax
+    endif
+    hungerPoints = controllerHunger
+    if controllerHungerTier >= 0
+      hungerTier = controllerHungerTier
+    else
+      hungerTier = DetermineHungerTierLocal(hungerPoints, hungerMax)
+    endif
   EndIf
 
   _overviewEnvWarmthDisplay = "" + _lastSafeRequirementInt
   _overviewPlayerWarmthDisplay = "" + _lastWarmthInt
   _overviewStatusDisplay = FormatPreparednessStatus(preparednessTier)
+  _overviewHungerMaxDisplay = "" + hungerMax
+  _overviewHungerPointsDisplay = "" + hungerPoints
+  _overviewHungerStatusDisplay = FormatHungerStatus(hungerTier)
 EndFunction
 
 Function UpdateWarmthCache()
@@ -588,6 +619,18 @@ Function RefreshOverviewReadout()
   If _optOverviewStatus != 0
     SetTextOptionValue(_optOverviewStatus, _overviewStatusDisplay)
   EndIf
+  If _optOverviewHungerMax != 0
+    SetTextOptionValue(_optOverviewHungerMax, _overviewHungerMaxDisplay)
+  EndIf
+  If _optOverviewHungerCurrent != 0
+    SetTextOptionValue(_optOverviewHungerCurrent, _overviewHungerPointsDisplay)
+  EndIf
+  If _optOverviewHungerStatus != 0
+    SetTextOptionValue(_optOverviewHungerStatus, _overviewHungerStatusDisplay)
+  EndIf
+  If _optOverviewRestStub != 0
+    SetTextOptionValue(_optOverviewRestStub, "Coming Soon")
+  EndIf
 EndFunction
 
 Function UpdatePenaltyCache()
@@ -633,38 +676,117 @@ Int Function RoundFloat(Float value)
 EndFunction
 
 Int Function DeterminePreparednessTierLocal(Float warmth, Float safeRequirement)
-  if safeRequirement <= 0.0
+  Float coverage = ComputeCoveragePercentLocal(warmth, safeRequirement)
+  return DetermineCoverageTierLocal(coverage)
+EndFunction
+
+Float Function ComputeCoveragePercentLocal(Float playerWarmth, Float environmentRequirement)
+  Float coverage = 100.0
+
+  Float requirement = environmentRequirement
+  if requirement < 0.0
+    requirement = 0.0
+  endif
+
+  if requirement > 0.001
+    coverage = 0.0
+    if playerWarmth > 0.0
+      coverage = (playerWarmth / requirement) * 100.0
+    endif
+  endif
+
+  if coverage < 0.0
+    coverage = 0.0
+  elseif coverage > 100.0
+    coverage = 100.0
+  endif
+
+  return coverage
+EndFunction
+
+Int Function DetermineCoverageTierLocal(Float coveragePercent)
+  Float normalized = coveragePercent
+  if normalized < 0.0
+    normalized = 0.0
+  elseif normalized > 100.0
+    normalized = 100.0
+  endif
+
+  if normalized >= 100.0
+    return 0
+  elseif normalized >= 75.0
+    return 1
+  elseif normalized >= 50.0
+    return 2
+  elseif normalized >= 25.0
+    return 3
+  elseif normalized >= 1.0
     return 4
   endif
-
-  if warmth < 0.0
-    warmth = 0.0
-  endif
-
-  Float ratio = warmth / safeRequirement
-  if ratio < 0.25
-    return 0
-  elseif ratio < 0.50
-    return 1
-  elseif ratio < 0.75
-    return 2
-  elseif ratio < 1.0
-    return 3
-  endif
-  return 4
+  return 5
 EndFunction
 
 String Function FormatPreparednessStatus(Int tier)
-  if tier <= 0
-    return "Freezing"
-  elseif tier == 1
-    return "Cold"
-  elseif tier == 2
-    return "Breezy"
-  elseif tier == 3
-    return "Under-dressed"
+  Int resolvedTier = ClampRange(tier, 0, 5)
+  if resolvedTier == 0
+    return "Comfortable (Tier 0)"
+  elseif resolvedTier == 1
+    return "Slightly Under Dressed (Tier 1)"
+  elseif resolvedTier == 2
+    return "Breezy (Tier 2)"
+  elseif resolvedTier == 3
+    return "Cold (Tier 3)"
+  elseif resolvedTier == 4
+    return "Freezing (Tier 4)"
   endif
-  return "Comfortable"
+  return "Frozen (Tier 5)"
+EndFunction
+
+Int Function DetermineHungerTierLocal(Int hungerPoints, Int hungerMax)
+  Int effectiveMax = hungerMax
+  if effectiveMax <= 0
+    effectiveMax = 100
+  endif
+
+  Float normalized = 0.0
+  if hungerPoints > 0 && effectiveMax > 0
+    normalized = (hungerPoints as Float) / (effectiveMax as Float) * 100.0
+  endif
+
+  if normalized < 0.0
+    normalized = 0.0
+  elseif normalized > 100.0
+    normalized = 100.0
+  endif
+
+  if normalized >= 100.0
+    return 0
+  elseif normalized >= 75.0
+    return 1
+  elseif normalized >= 50.0
+    return 2
+  elseif normalized >= 25.0
+    return 3
+  elseif normalized >= 1.0
+    return 4
+  endif
+  return 5
+EndFunction
+
+String Function FormatHungerStatus(Int tier)
+  Int resolvedTier = ClampRange(tier, 0, 5)
+  if resolvedTier == 0
+    return "Fed (Tier 0)"
+  elseif resolvedTier == 1
+    return "Peckish (Tier 1)"
+  elseif resolvedTier == 2
+    return "Hungry (Tier 2)"
+  elseif resolvedTier == 3
+    return "Ravenous (Tier 3)"
+  elseif resolvedTier == 4
+    return "Starving (Tier 4)"
+  endif
+  return "Starved (Tier 5)"
 EndFunction
 
 Int Function ClampRange(Int v, Int minV, Int maxV)
