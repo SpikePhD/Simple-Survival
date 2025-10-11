@@ -6,6 +6,7 @@ Scriptname SS_Weather extends Quest
 Import JsonUtil
 Import StringUtil
 Import Math
+Import SS_JsonHelpers
 String Property CFG_PATH = "Data\\SKSE\\Plugins\\SS\\config.json" Auto
 
 ; =======================
@@ -29,8 +30,14 @@ Int   lastRegionBucket = -99
 Int   lastWeatherClass = -99
 
 ; --- Debug ---
-Bool  bDebugEnabled = False
-Bool  bTraceLogs    = False
+Bool  bDebugNotifications = False
+Bool  bTraceLogs          = False
+
+Bool Property DebugEnabled Hidden
+  Bool Function Get()
+    return bTraceLogs
+  EndFunction
+EndProperty
 
 ; --- Cadence control (adaptive) ---
 Bool  bAdaptiveTick = True       ; can expose via MCM later
@@ -70,13 +77,13 @@ Float kBaseWarmthFeet  = 25.0
 Float kBaseWarmthCloak = 30.0
 
 ; --- Gear warmth name bonus cache ---
-Bool  gearNameCacheValid = False
+Bool  _cacheReady = False
 Bool  gearNameCaseInsensitive = True
 Float gearNameBonusClamp = 0.0
 Int   gearNameCacheCount = 0
 Bool  gearNameUseLegacyFallback = False
-String[] gearNameMatchCache
-Float[]  gearNameBonusCache
+String[] _nameBonusKeys
+Float[]  _nameBonusVals
 
 Function ConfigureModule(Spell ability)
   if ability != None
@@ -93,6 +100,13 @@ EndFunction
 Function RequestEvaluate(String source, Bool forceImmediate = False)
   if source == ""
     source = "RequestFastTick"
+  endif
+
+  if !_cacheReady
+    EnsureNameBonusCache(False)
+    if !_cacheReady
+      return
+    endif
   endif
 
   if forceImmediate
@@ -151,7 +165,7 @@ Event OnInit()
   bRunning = True
   ; instant reactions on gear changes
   RegisterForModEvent("SS_QuickTick", "OnQuickTick")
-  EvaluateWeather("Init")
+  QueueInitialEvaluate("Init")
 EndEvent
 
 Event OnPlayerLoadGame()
@@ -159,7 +173,7 @@ Event OnPlayerLoadGame()
   ApplyDebugFlags()
   EnsurePlayerHasAbility()
   bRunning = True
-  EvaluateWeather("OnPlayerLoadGame")
+  QueueInitialEvaluate("OnPlayerLoadGame")
 EndEvent
 
 Function EvaluateWeather(String source = "Tick")
@@ -193,7 +207,7 @@ Function EvaluateWeather(String source = "Tick")
   String newWorldspaceName = ResolveWorldspaceName(currentWorldspace)
   Weather currentWeather = Weather.GetCurrentWeather()
 
-  if bTraceLogs
+  if DebugEnabled
     Debug.Trace("[SS] EvaluateWeather (" + source + ")")
   endif
 
@@ -252,7 +266,7 @@ Function EvaluateWeather(String source = "Tick")
       ModEvent.PushString(tierEvent, source)
       ModEvent.Send(tierEvent)
 
-      if bTraceLogs
+      if DebugEnabled
         Debug.Trace("[SS] Sent SS_TierChanged | tier=" + preparednessTier + " source=" + source)
       endif
     endif
@@ -274,16 +288,16 @@ Function EvaluateWeather(String source = "Tick")
       ModEvent.PushInt(h, tierPayload)
       ModEvent.Send(h)
 
-      if bDebugEnabled
+      if bDebugNotifications
         String debugMsg = "[SS] warm=" + warmth + " / req=" + baseRequirement + " + modifiers=" + modifierSum + " => " + safeReq + " | def=" + deficit + " | hpPen=" + healthPenaltyPct + "% spdPen=" + speedPenaltyPct + "%"
-        if bTraceLogs
+        if DebugEnabled
           Debug.Trace(debugMsg)
         else
           Debug.Notification(debugMsg)
         endif
       endif
 
-      if bTraceLogs
+      if DebugEnabled
         String traceMsg = "[SS] Sent SS_SetCold | hp=" + healthPenaltyPct + "% st=" + staminaPenaltyPct + "% mg=" + magickaPenaltyPct + "% speed=" + speedPenaltyPct + "%"
         if tierPayload != -1
           traceMsg = traceMsg + " tier=" + tierPayload
@@ -308,10 +322,10 @@ Function EvaluateWeather(String source = "Tick")
       int h2 = ModEvent.Create("SS_ClearCold")
       if h2
         ModEvent.Send(h2)
-        if bDebugEnabled
+        if bDebugNotifications
           Debug.Notification("[SS] cold OFF -> clear penalties")
         endif
-        if bTraceLogs
+        if DebugEnabled
           Debug.Trace("[SS] Sent SS_ClearCold")
         endif
       endif
@@ -418,15 +432,15 @@ Function ApplyColdResourceDrain(Actor p)
           endif
           if drain > 0.0
             p.DamageActorValue(av, drain)
-            if bTraceLogs
+            if DebugEnabled
               Debug.Trace("[SS] Cold drain " + av + ": current=" + current + " max=" + maxValue + " drain=" + drain + " floor=" + floorValue)
             endif
           endif
-        elseif bTraceLogs
+        elseif DebugEnabled
           Debug.Trace("[SS] Cold drain skipped for " + av + " (at or below floor)")
         endif
       endif
-    elseif bTraceLogs
+    elseif DebugEnabled
       Debug.Trace("[SS] Cold drain skipped for " + av + " (percent=" + percent + ")")
     endif
     i += 1
@@ -447,7 +461,7 @@ Function EnsurePlayerHasAbility()
   endif
   if !p.HasSpell(SS_PlayerAbility)
     p.AddSpell(SS_PlayerAbility, False)
-    if bTraceLogs
+    if DebugEnabled
       Debug.Trace("[SS] Gave player SS_PlayerAbility")
     endif
   endif
@@ -707,7 +721,7 @@ Function DispatchToast(String label, String detail, String category)
 
   Debug.Notification(toastMessage)
 
-  if bTraceLogs
+  if DebugEnabled
     Debug.Trace("[SS][" + category + "] " + toastMessage)
   endif
 EndFunction
@@ -948,7 +962,7 @@ Float Function GetNameBonusForItem(Form item)
 
   EnsureNameBonusCache(False)
 
-  if !gearNameCacheValid
+  if !_cacheReady
     return 0.0
   endif
 
@@ -964,12 +978,12 @@ Float Function GetNameBonusForItem(Form item)
 
   Float bonus = 0.0
 
-  if gearNameCacheCount > 0 && gearNameMatchCache != None && gearNameBonusCache != None
+  if gearNameCacheCount > 0 && _nameBonusKeys != None && _nameBonusVals != None
     Int index = 0
     while index < gearNameCacheCount
-      String matchToken = gearNameMatchCache[index]
+      String matchToken = _nameBonusKeys[index]
       if matchToken != "" && StringUtil.Find(comparisonName, matchToken) >= 0
-        bonus += gearNameBonusCache[index]
+        bonus += _nameBonusVals[index]
       endif
       index += 1
     endwhile
@@ -1092,24 +1106,20 @@ Float Function GetLegacyWarmthBonus(String lowerName)
 EndFunction
 
 Function InvalidateNameBonusCache()
-  gearNameCacheValid = False
+  _cacheReady = False
   gearNameCacheCount = 0
-  gearNameMatchCache = None
-  gearNameBonusCache = None
+  _nameBonusKeys = None
+  _nameBonusVals = None
   gearNameUseLegacyFallback = False
   gearNameBonusClamp = 0.0
 EndFunction
 
 Function EnsureNameBonusCache(Bool forceReload = False)
-  if gearNameCacheValid && !forceReload
+  if _cacheReady && !forceReload
     return
   endif
 
-  gearNameCacheValid = False
-  gearNameCacheCount = 0
-  gearNameMatchCache = None
-  gearNameBonusCache = None
-  gearNameUseLegacyFallback = False
+  InvalidateNameBonusCache()
 
   gearNameCaseInsensitive = GetB("gear.nameMatchCaseInsensitive", True)
   gearNameBonusClamp = GetF("gear.nameBonusMaxPerItem", 0.0)
@@ -1117,50 +1127,106 @@ Function EnsureNameBonusCache(Bool forceReload = False)
     gearNameBonusClamp = 0.0
   endif
 
-  Int entryCount = JsonUtil.PathCount(CFG_PATH, "gear.nameBonuses")
-  if entryCount == -1
-    gearNameUseLegacyFallback = True
-    entryCount = 0
+  Bool loadedFromArrayPairs = False
+
+  String[] configuredKeys = SS_JsonHelpers.GetStringArraySafe(CFG_PATH, "gear.nameBonusKeys")
+  Float[] configuredValues = SS_JsonHelpers.GetFloatArraySafe(CFG_PATH, "gear.nameBonusVals")
+
+  Int keyCount = 0
+  Int valueCount = 0
+  if configuredKeys != None
+    keyCount = configuredKeys.Length
+  endif
+  if configuredValues != None
+    valueCount = configuredValues.Length
   endif
 
-  if entryCount > 0
-    String[] matches = Utility.CreateStringArray(entryCount)
-    Float[]  values  = Utility.CreateFloatArray(entryCount)
-    Int validCount = 0
-    Int index = 0
-    while index < entryCount
-      String matchPath = "gear.nameBonuses[" + index + "].match"
-      String matchToken = JsonUtil.GetPathStringValue(CFG_PATH, matchPath, "")
-      matchToken = TrimWhitespace(matchToken)
-      String bonusPath = "gear.nameBonuses[" + index + "].bonus"
-      Float bonusValue = JsonUtil.GetPathFloatValue(CFG_PATH, bonusPath, 0.0)
+  if keyCount > 0 && valueCount > 0
+    Int pairCount = keyCount
+    if valueCount < pairCount
+      pairCount = valueCount
+    endif
 
-      if matchToken != "" && bonusValue > 0.0
+    String[] tempKeys = Utility.CreateStringArray(pairCount)
+    Float[]  tempVals = Utility.CreateFloatArray(pairCount)
+    Int validPairCount = 0
+    Int pairIndex = 0
+    while pairIndex < pairCount
+      String currentKey = TrimWhitespace(configuredKeys[pairIndex])
+      Float currentValue = configuredValues[pairIndex]
+
+      if currentKey != "" && currentValue > 0.0
         if gearNameCaseInsensitive
-          matchToken = NormalizeWarmthName(matchToken)
+          currentKey = NormalizeWarmthName(currentKey)
         endif
-        matches[validCount] = matchToken
-        values[validCount] = bonusValue
-        validCount += 1
+        tempKeys[validPairCount] = currentKey
+        tempVals[validPairCount] = currentValue
+        validPairCount += 1
       endif
 
-      index += 1
+      pairIndex += 1
     endwhile
 
-    if validCount > 0
-      gearNameMatchCache = Utility.CreateStringArray(validCount)
-      gearNameBonusCache = Utility.CreateFloatArray(validCount)
-      index = 0
-      while index < validCount
-        gearNameMatchCache[index] = matches[index]
-        gearNameBonusCache[index] = values[index]
-        index += 1
+    if validPairCount > 0
+      _nameBonusKeys = Utility.CreateStringArray(validPairCount)
+      _nameBonusVals = Utility.CreateFloatArray(validPairCount)
+      Int assignIndex = 0
+      while assignIndex < validPairCount
+        _nameBonusKeys[assignIndex] = tempKeys[assignIndex]
+        _nameBonusVals[assignIndex] = tempVals[assignIndex]
+        assignIndex += 1
       endwhile
-      gearNameCacheCount = validCount
+      gearNameCacheCount = validPairCount
+      loadedFromArrayPairs = True
     endif
   endif
 
-  gearNameCacheValid = True
+  if !loadedFromArrayPairs
+    Int entryCount = JsonUtil.PathCount(CFG_PATH, "gear.nameBonuses")
+    if entryCount == -1
+      gearNameUseLegacyFallback = True
+      entryCount = 0
+    endif
+
+    if entryCount > 0
+      String[] matches = Utility.CreateStringArray(entryCount)
+      Float[]  values  = Utility.CreateFloatArray(entryCount)
+      Int validCount = 0
+      Int index = 0
+      while index < entryCount
+        String matchPath = "gear.nameBonuses[" + index + "].match"
+        String matchToken = JsonUtil.GetPathStringValue(CFG_PATH, matchPath, "")
+        matchToken = TrimWhitespace(matchToken)
+        String bonusPath = "gear.nameBonuses[" + index + "].bonus"
+        Float bonusValue = JsonUtil.GetPathFloatValue(CFG_PATH, bonusPath, 0.0)
+
+        if matchToken != "" && bonusValue > 0.0
+          if gearNameCaseInsensitive
+            matchToken = NormalizeWarmthName(matchToken)
+          endif
+          matches[validCount] = matchToken
+          values[validCount] = bonusValue
+          validCount += 1
+        endif
+
+        index += 1
+      endwhile
+
+      if validCount > 0
+        _nameBonusKeys = Utility.CreateStringArray(validCount)
+        _nameBonusVals = Utility.CreateFloatArray(validCount)
+        index = 0
+        while index < validCount
+          _nameBonusKeys[index] = matches[index]
+          _nameBonusVals[index] = values[index]
+          index += 1
+        endwhile
+        gearNameCacheCount = validCount
+      endif
+    endif
+  endif
+
+  _cacheReady = True
 EndFunction
 
 Bool Function ShouldForceNameBonusReload(String source)
@@ -1484,17 +1550,17 @@ Function InitConfigDefaults()
 EndFunction
 
 Event OnQuickTick(String speedStr, Float regenMult)
-  if bTraceLogs
+  if DebugEnabled
     Debug.Trace("[SS] QuickTick request received -> evaluate")
   endif
   RequestEvaluate("QuickTick", True)
 EndEvent
 
 Function ApplyDebugFlags()
-  bDebugEnabled = GetB("debug.enable", False)
-  bTraceLogs    = GetB("debug.trace", False)
-  if bTraceLogs
-    Debug.Trace("[SS] Controller init: debug=" + bDebugEnabled + " trace=1")
+  bDebugNotifications = GetB("debug.enable", False)
+  bTraceLogs          = GetB("debug.trace", False)
+  if DebugEnabled
+    Debug.Trace("[SS] Controller init: debug=" + bDebugNotifications + " trace=1")
   endif
 
 EndFunction
@@ -1502,6 +1568,14 @@ EndFunction
 Event OnUpdate()
   if !bRefreshQueued
     return
+  endif
+
+  if !_cacheReady
+    EnsureNameBonusCache(False)
+    if !_cacheReady
+      RegisterForSingleUpdate(0.5)
+      return
+    endif
   endif
 
   bRefreshQueued = False
@@ -1514,6 +1588,23 @@ Event OnUpdate()
 
   EvaluateWeather(source)
 EndEvent
+
+Function QueueInitialEvaluate(String source)
+  if source == ""
+    source = "Startup"
+  endif
+
+  if queuedSource != ""
+    if !SourceIncludes(queuedSource, source)
+      queuedSource = queuedSource + "|" + source
+    endif
+  else
+    queuedSource = source
+  endif
+
+  bRefreshQueued = True
+  RegisterForSingleUpdate(0.5)
+EndFunction
 
 Float Function GetMinRefreshGapSeconds()
   Float configured = GetF("weather.cold.minRefreshGapSeconds", kMinRefreshGapSeconds)

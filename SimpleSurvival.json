@@ -1,0 +1,11 @@
+{
+  "warmth": {
+    "nameBonus": {
+      "names": ["fur", "cloak"],
+      "values": [10.0, 5.0]
+    }
+  },
+  "hunger": {
+    "foodKeywordsFormList": "SimpleSurvival.esp|0x012345"
+  }
+}

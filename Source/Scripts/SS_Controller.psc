@@ -8,6 +8,18 @@ SS_Weather WeatherModule
 SS_Hunger HungerModule
 Bool bInitialized = False
 
+Bool Property DebugEnabled Hidden
+  Bool Function Get()
+    if WeatherModule != None
+      return WeatherModule.DebugEnabled
+    endif
+    if HungerModule != None
+      return HungerModule.DebugEnabled
+    endif
+    return False
+  EndFunction
+EndProperty
+
 Event OnInit()
   InitializeWeatherModule()
   if WeatherModule != None
