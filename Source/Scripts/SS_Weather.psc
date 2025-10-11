@@ -232,25 +232,6 @@ Function EvaluateWeather(String source = "Tick")
   Float autoPer   = GetF("weather.cold.autoWarmthPerPiece", 100.0)
   Float coldTick  = GetF("weather.cold.tick", 0.0) ; optional hp bleed per tick at max deficit
 
-Int entryCount = matches.Length
-if entryCount <= 0 || values.Length <= 0
-  ; No config present -> keep cache invalid but harmless
-  gearNameCacheValid = False
-  gearNameCacheCount = 0
-  gearNameMatchCache = None
-  gearNameBonusCache = None
-  return
-endif
-
-if values.Length != entryCount
-  ; Mismatched lengths -> disable cache safely
-  gearNameCacheValid = False
-  gearNameCacheCount = 0
-  gearNameMatchCache = None
-  gearNameBonusCache = None
-  return
-endif
-
   EnsureNameBonusCache(ShouldForceNameBonusReload(source))
 
   LastBaseRequirement = baseRequirement
@@ -1040,23 +1021,24 @@ Float Function GetNameBonusForItem(Form akItem)
     endif
 
     String n = akItem.GetName()
-    if n == None
+    if n == ""
         return 0.0
     endif
-    n = StringUtil.Trim(n)
+    n = TrimWhitespace(n)
     if n == ""
         return 0.0
     endif
 
     ; case-insensitive substring match (adjust later if you add token/boundary mode)
-    String nameLower = StringUtil.ToLower(n)
+    String nameLower = NormalizeWarmthName(n)
 
     Float acc = 0.0
     int i = 0
     while i < gearNameCacheCount
         String pat = gearNameMatchCache[i]
-        if pat != None && pat != ""
-            String patLower = StringUtil.ToLower(pat)
+        String trimmedPat = TrimWhitespace(pat)
+        if trimmedPat != ""
+            String patLower = NormalizeWarmthName(trimmedPat)
             if StringUtil.Find(nameLower, patLower) != -1
                 acc += gearNameBonusCache[i]
             endif
@@ -1244,6 +1226,46 @@ Bool Function ShouldForceNameBonusReload(String source)
   endif
 
   return False
+EndFunction
+
+Bool Function IsWhitespaceChar(String ch)
+  if ch == " "
+    return True
+  endif
+  if ch == "\t"
+    return True
+  endif
+  if ch == "\n"
+    return True
+  endif
+  if ch == "\r"
+    return True
+  endif
+  return False
+EndFunction
+
+String Function TrimWhitespace(String value)
+  if value == ""
+    return value
+  endif
+
+  Int startIndex = 0
+  Int endIndex = StringUtil.GetLength(value) - 1
+
+  while startIndex <= endIndex && IsWhitespaceChar(StringUtil.GetNthChar(value, startIndex))
+    startIndex += 1
+  endwhile
+
+  while endIndex >= startIndex && IsWhitespaceChar(StringUtil.GetNthChar(value, endIndex))
+    endIndex -= 1
+  endwhile
+
+  if startIndex > endIndex
+    return ""
+  endif
+
+  Int length = endIndex - startIndex + 1
+  return StringUtil.SubString(value, startIndex, length)
 EndFunction
 
 String Function NormalizeWarmthName(String rawName)
