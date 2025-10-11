@@ -717,6 +717,7 @@ Function LoadFoodConsumptionConfig()
         extraFoodKeywords = extraFoodKeywords + keywordEntry
       endif
 
+      extraFoodKeywords = AppendKeywordToArray(extraFoodKeywords, keywordEntry)
       extraFoodKeywordCount += 1
     endif
 
@@ -766,6 +767,7 @@ Keyword[] Function BuildKeywordArrayFromFormList(FormList keywordList)
         result = result + keywordEntry
       endif
 
+      result = AppendKeywordToArray(result, keywordEntry)
       appended += 1
     endif
 
@@ -781,6 +783,30 @@ Keyword[] Function BuildKeywordArrayFromFormList(FormList keywordList)
   endif
 
   return result
+EndFunction
+
+Keyword[] Function AppendKeywordToArray(Keyword[] sourceArray, Keyword newKeyword)
+  if newKeyword == None
+    return sourceArray
+  endif
+
+  if sourceArray == None
+    Keyword[] firstEntry = new Keyword[1]
+    firstEntry[0] = newKeyword
+    return firstEntry
+  endif
+
+  Int length = sourceArray.Length
+  Keyword[] expanded = new Keyword[length + 1]
+  Int index = 0
+
+  while index < length
+    expanded[index] = sourceArray[index]
+    index += 1
+  endwhile
+
+  expanded[length] = newKeyword
+  return expanded
 EndFunction
 
 Function LoadFoodValueBands()
