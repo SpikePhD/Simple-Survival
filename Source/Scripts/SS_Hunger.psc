@@ -40,6 +40,8 @@ Int[] foodValueBandMins
 Int[] foodValueBandMaxes
 Int[] foodValueBandPoints
 
+FormList Property FoodKeywordList Auto
+
 Event OnInit()
   InitializeModule()
 EndEvent
@@ -667,6 +669,14 @@ Function LoadFoodConsumptionConfig()
     rawFoodFactor = 0.0
   endif
 
+  Keyword[] propertyKeywords = BuildKeywordArrayFromFormList(FoodKeywordList)
+  extraFoodKeywords = propertyKeywords
+  if extraFoodKeywords != None
+    extraFoodKeywordCount = extraFoodKeywords.Length
+  else
+    extraFoodKeywordCount = 0
+  endif
+
   Int configuredCount = JsonUtil.PathCount(CFG_PATH, "hunger.food.extraKeywords")
   if configuredCount < 0
     configuredCount = 0
@@ -675,18 +685,21 @@ Function LoadFoodConsumptionConfig()
   Int entryLimit = 128
   Int i = 0
 
-  ; Preallocate to the hard cap (Papyrus arrays must be 1..128 and literal-sized)
-  extraFoodKeywords = new Keyword[128]
-  extraFoodKeywordCount = 0
-
   while i < configuredCount && extraFoodKeywordCount < entryLimit
     String basePath = "hunger.food.extraKeywords[" + IntToString(i) + "]"
     String keywordName = JsonUtil.GetPathStringValue(CFG_PATH, basePath, "")
     Keyword keywordEntry = ResolveKeyword(keywordName)
 
     if keywordEntry != None
-      ; Insert at next slot; no array concatenation
-      extraFoodKeywords[extraFoodKeywordCount] = keywordEntry
+      Keyword[] appendArray = new Keyword[1]
+      appendArray[0] = keywordEntry
+
+      if extraFoodKeywords == None
+        extraFoodKeywords = appendArray
+      else
+        extraFoodKeywords = extraFoodKeywords + appendArray
+      endif
+
       extraFoodKeywordCount += 1
     endif
 
@@ -702,9 +715,57 @@ Function LoadFoodConsumptionConfig()
   if extraFoodKeywordCount <= 0
     extraFoodKeywords = None
     extraFoodKeywordCount = 0
+  elseif extraFoodKeywords != None
+    extraFoodKeywordCount = extraFoodKeywords.Length
   endif
 
   LoadFoodValueBands()
+EndFunction
+
+Keyword[] Function BuildKeywordArrayFromFormList(FormList keywordList)
+  if keywordList == None
+    return None
+  endif
+
+  Int entryLimit = 128
+  Int listSize = keywordList.GetSize()
+  if listSize <= 0
+    return None
+  endif
+
+  Keyword[] result = None
+  Int appended = 0
+  Int index = 0
+
+  while index < listSize && appended < entryLimit
+    Form entryForm = keywordList.GetAt(index)
+    Keyword keywordEntry = entryForm as Keyword
+
+    if keywordEntry != None
+      Keyword[] appendArray = new Keyword[1]
+      appendArray[0] = keywordEntry
+
+      if result == None
+        result = appendArray
+      else
+        result = result + appendArray
+      endif
+
+      appended += 1
+    endif
+
+    index += 1
+  endwhile
+
+  if appended <= 0
+    return None
+  endif
+
+  if index < listSize
+    TraceHunger("Food keyword list property hit the Papyrus 128 entry limit, ignoring additional entries.")
+  endif
+
+  return result
 EndFunction
 
 Function LoadFoodValueBands()
