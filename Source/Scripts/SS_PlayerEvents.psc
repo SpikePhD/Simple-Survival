@@ -107,8 +107,6 @@ Event OnUpdate()
       source = "SwimmingStart"
     endif
     TriggerEnvironmentRefresh(source, controller)
-  elseif isSwimming && controller != None
-    controller.RequestRefresh("Swimming")
   endif
 
   Float nextInterval = 1.5
@@ -129,7 +127,7 @@ Function TriggerEnvironmentRefresh(String source = "", SS_Controller cachedContr
     if source != "" && debugEnabled
       Debug.Trace("[SS] PlayerEvents: " + source + " -> refresh")
     endif
-    controller.RequestRefresh(source)
+    controller.RequestEnvironmentEvaluate(source)
   endif
 EndFunction
 
