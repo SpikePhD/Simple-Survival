@@ -1202,30 +1202,30 @@ Function EnsureNameBonusCache(bool forceReload = False)
 EndFunction
 
 Bool Function ShouldForceNameBonusReload(String source)
-  if source == ""
+    if source == ""
+        return False
+    endif
+
+    if SourceIncludes(source, "MCM")
+        return True
+    endif
+    if SourceIncludes(source, "Refresh")
+        return True
+    endif
+    if SourceIncludes(source, "Init")
+        return True
+    endif
+    if SourceIncludes(source, "LoadGame")
+        return True
+    endif
+    if SourceIncludes(source, "QuickTick")
+        return True
+    endif
+    if SourceIncludes(source, "FastTick")
+        return True
+    endif
+
     return False
-  endif
-
-  if SourceIncludes(source, "MCM")
-    return True
-  endif
-  if SourceIncludes(source, "Refresh")
-    return True
-  endif
-  if SourceIncludes(source, "Init")
-    return True
-  endif
-  if SourceIncludes(source, "LoadGame")
-    return True
-  endif
-  if SourceIncludes(source, "QuickTick")
-    return True
-  endif
-  if SourceIncludes(source, "FastTick")
-    return True
-  endif
-
-  return False
 EndFunction
 
 Bool Function IsWhitespaceChar(String ch)
