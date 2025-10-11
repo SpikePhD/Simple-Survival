@@ -1024,6 +1024,9 @@ Float Function GetNameBonusForItem(Form akItem)
     if n == ""
         return 0.0
     endif
+    if n == ""
+        return 0.0
+    endif
     n = TrimWhitespace(n)
     if n == ""
         return 0.0
@@ -1034,7 +1037,18 @@ Float Function GetNameBonusForItem(Form akItem)
 
     Float acc = 0.0
     int i = 0
+    String pat = ""
+    String trimmedPat = ""
+    String patLower = ""
     while i < gearNameCacheCount
+        pat = gearNameMatchCache[i]
+        if pat != None
+            trimmedPat = TrimWhitespace(pat)
+            if trimmedPat != ""
+                patLower = StringUtil.ToLower(trimmedPat)
+                if StringUtil.Find(nameLower, patLower) != -1
+                    acc += gearNameBonusCache[i]
+                endif
         String pat = gearNameMatchCache[i]
         String trimmedPat = TrimWhitespace(pat)
         if trimmedPat != ""
