@@ -299,6 +299,24 @@ Function RequestRefresh(String source = "RequestRefresh")
   endif
 EndFunction
 
+Function RequestEnvironmentEvaluate(String source = "EnvironmentChange")
+  if HungerModule == None
+    InitializeHungerModule()
+  endif
+
+  if HungerModule != None
+    HungerModule.UpdateFromGameTime(False)
+  endif
+
+  if WeatherModule == None
+    InitializeWeatherModule()
+  endif
+
+  if WeatherModule != None
+    WeatherModule.RequestEvaluate(source, True)
+  endif
+EndFunction
+
 Function NotifyFastTravelOrigin()
   if WeatherModule != None
     WeatherModule.RecordFastTravelOrigin()
