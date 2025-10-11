@@ -816,6 +816,7 @@ Keyword[] Function AppendKeywordToArray(Keyword[] sourceArray, Keyword newKeywor
   appendEntry[0] = newKeyword
 
   return sourceArray + appendEntry
+  return sourceArray + newKeyword
 EndFunction
 
 Function LoadFoodValueBands()
