@@ -710,6 +710,13 @@ Function LoadFoodConsumptionConfig()
     Keyword keywordEntry = ResolveKeyword(keywordName)
 
     if keywordEntry != None
+      if extraFoodKeywords == None
+        extraFoodKeywords = new Keyword[1]
+        extraFoodKeywords[0] = keywordEntry
+      else
+        extraFoodKeywords = extraFoodKeywords + keywordEntry
+      endif
+
       extraFoodKeywords = AppendKeywordToArray(extraFoodKeywords, keywordEntry)
       extraFoodKeywordCount += 1
     endif
@@ -753,6 +760,13 @@ Keyword[] Function BuildKeywordArrayFromFormList(FormList keywordList)
     Keyword keywordEntry = entryForm as Keyword
 
     if keywordEntry != None
+      if result == None
+        result = new Keyword[1]
+        result[0] = keywordEntry
+      else
+        result = result + keywordEntry
+      endif
+
       result = AppendKeywordToArray(result, keywordEntry)
       appended += 1
     endif
