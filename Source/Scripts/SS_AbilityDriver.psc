@@ -29,6 +29,12 @@ Float Property HungerTier4BonusMaxPct = 10.0 Auto
 Float Property HungerTier4BonusRegenPct = 10.0 Auto
 Bool bTraceLogs = False
 
+Bool Property DebugEnabled Hidden
+  Bool Function Get()
+    return bTraceLogs
+  EndFunction
+EndProperty
+
 ; ---- Tier tracking ----
 Actor PlayerRef
 Int   currentWeatherTier = -1
@@ -76,7 +82,7 @@ Event OnEffectStart(Actor akTarget, Actor akCaster)
   RegisterForModEvent("SS_SetCold", "OnColdEvent")
   RegisterForModEvent("SS_ClearCold", "OnColdClear")
   RegisterForModEvent("SS_HungerTierChanged", "OnHungerTierChanged")
-  if bTraceLogs
+  if DebugEnabled
     Debug.Trace("[SS] Driver OnEffectStart: registered for SS_SetCold / SS_ClearCold / SS_HungerTierChanged")
   endif
 EndEvent
@@ -84,7 +90,7 @@ EndEvent
 Event OnEffectFinish(Actor akTarget, Actor akCaster)
   ClearAll()
   UnregisterForAllModEvents()
-  if bTraceLogs
+  if DebugEnabled
     Debug.Trace("[SS] AbilityDriver: finish & cleared")
   endif
   PlayerRef = None
@@ -104,7 +110,7 @@ Event OnObjectEquipped(Form akBaseObject, ObjectReference akRef)
       ModEvent.PushFloat(h, 0.0)
       ModEvent.Send(h)
     endif
-    if bTraceLogs
+    if DebugEnabled
       Debug.Trace("[SS] Driver: equip detected -> QuickTick sent")
     endif
   endif
@@ -118,7 +124,7 @@ Event OnObjectUnequipped(Form akBaseObject, ObjectReference akRef)
       ModEvent.PushFloat(h, 0.0)
       ModEvent.Send(h)
     endif
-    if bTraceLogs
+    if DebugEnabled
       Debug.Trace("[SS] Driver: unequip detected -> QuickTick sent")
     endif
   endif
@@ -137,7 +143,7 @@ Event OnColdEvent(Int healthPenaltyPct, Int staminaPenaltyPct, Int magickaPenalt
 EndEvent
 
 Event OnColdClear()
-  if bTraceLogs
+  if DebugEnabled
     Debug.Trace("[SS] Driver: OnColdClear -> reset")
   endif
   ClearTierEffects()
@@ -468,7 +474,7 @@ Function HandleTierUpdate(Int newTier)
   if tier == currentWeatherTier
     return
   endif
-  if bTraceLogs
+  if DebugEnabled
     Debug.Trace("[SS] Driver: weather tier change " + currentWeatherTier + " -> " + tier)
   endif
   BuildWeatherPackageForTier(tier)
@@ -481,7 +487,7 @@ Function HandleHungerTierUpdate(Int newTier)
   if tier == currentHungerTier
     return
   endif
-  if bTraceLogs
+  if DebugEnabled
     Debug.Trace("[SS] Driver: hunger tier change " + currentHungerTier + " -> " + tier)
   endif
   BuildHungerPackageForTier(tier)
@@ -513,7 +519,7 @@ Function HandleLinearPenalties(Int healthPenaltyPct, Int staminaPenaltyPct, Int 
   ApplyRegenPenalty("StaminaRateMult", staminaPenalty)
   ApplyRegenPenalty("MagickaRateMult", magickaPenalty)
 
-  if bTraceLogs
+  if DebugEnabled
     Debug.Trace("[SS] Driver: linear penalties hp=" + healthPenalty + "% st=" + staminaPenalty + "% mg=" + magickaPenalty + "% spd=" + speedPenalty + "%")
   endif
 

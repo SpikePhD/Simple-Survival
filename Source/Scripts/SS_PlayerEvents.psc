@@ -5,6 +5,13 @@ Import PO3_Events_Alias
 Quest Property ControllerQuest Auto
 Float sleepStartGameTime = 0.0
 Bool  lastSwimmingState = False
+Bool  cachedDebugTraceEnabled = False
+
+Bool Property DebugEnabled Hidden
+  Bool Function Get()
+    return cachedDebugTraceEnabled
+  EndFunction
+EndProperty
 
 Event OnInit()
   RegisterForWeatherChange(Self)
@@ -42,7 +49,11 @@ Event OnSleepStop(Bool abInterrupted)
 
   SS_Controller controller = ResolveController()
   if controller != None
-    Debug.Trace("[SS] PlayerEvents: Sleep ended (" + hoursSlept + "h) -> refresh")
+    Bool debugEnabled = controller.DebugEnabled
+    cachedDebugTraceEnabled = debugEnabled
+    if debugEnabled
+      Debug.Trace("[SS] PlayerEvents: Sleep ended (" + hoursSlept + "h) -> refresh")
+    endif
     controller.NotifySleepComplete(hoursSlept)
   endif
 EndEvent
@@ -113,7 +124,9 @@ Function TriggerEnvironmentRefresh(String source = "", SS_Controller cachedContr
     controller = ResolveController()
   endif
   if controller != None
-    if source != ""
+    Bool debugEnabled = controller.DebugEnabled
+    cachedDebugTraceEnabled = debugEnabled
+    if source != "" && debugEnabled
       Debug.Trace("[SS] PlayerEvents: " + source + " -> refresh")
     endif
     controller.RequestRefresh(source)
@@ -132,8 +145,14 @@ SS_Controller Function ResolveController()
     if owningQuest != None
       controller = owningQuest as SS_Controller
     else
-      Debug.Trace("[SS] PlayerEvents: No owning quest for alias")
+      if DebugEnabled
+        Debug.Trace("[SS] PlayerEvents: No owning quest for alias")
+      endif
     endif
+  endif
+
+  if controller != None
+    cachedDebugTraceEnabled = controller.DebugEnabled
   endif
 
   return controller

@@ -31,6 +31,12 @@ Bool hourlyUpdateArmed = False
 Bool suppressHungerTierToasts = False
 Bool bTraceLogs = False
 
+Bool Property DebugEnabled Hidden
+  Bool Function Get()
+    return bTraceLogs
+  EndFunction
+EndProperty
+
 Keyword baseFoodKeyword
 Keyword rawFoodKeyword
 Keyword[] extraFoodKeywords
@@ -972,7 +978,7 @@ Function RefreshDebugTraceFlag()
 EndFunction
 
 Function TraceHunger(String logMessage)
-  if !bTraceLogs
+  if !DebugEnabled
     return
   endif
 
@@ -980,7 +986,7 @@ Function TraceHunger(String logMessage)
 EndFunction
 
 Function TraceHungerTick(Float hoursElapsed, Bool sleepingState)
-  if !bTraceLogs
+  if !DebugEnabled
     return
   endif
 
@@ -995,7 +1001,7 @@ Function TraceHungerTick(Float hoursElapsed, Bool sleepingState)
 EndFunction
 
 Function TraceHungerTier(Int tier)
-  if !bTraceLogs
+  if !DebugEnabled
     return
   endif
 
@@ -1003,7 +1009,7 @@ Function TraceHungerTier(Int tier)
 EndFunction
 
 Function TraceFoodConsumed(Potion foodItem, Int restorePoints)
-  if !bTraceLogs
+  if !DebugEnabled
     return
   endif
 
