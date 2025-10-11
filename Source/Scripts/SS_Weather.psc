@@ -1040,11 +1040,15 @@ Float Function GetNameBonusForItem(Form akItem)
     endif
 
     String n = akItem.GetName()
-    if n == None || n == ""
+    if n == None
+        return 0.0
+    endif
+    n = StringUtil.Trim(n)
+    if n == ""
         return 0.0
     endif
 
-    ; case-insensitive simple substring match (swap for token/boundary if you added that)
+    ; case-insensitive substring match (adjust later if you add token/boundary mode)
     String nameLower = StringUtil.ToLower(n)
 
     Float acc = 0.0
@@ -1052,14 +1056,15 @@ Float Function GetNameBonusForItem(Form akItem)
     while i < gearNameCacheCount
         String pat = gearNameMatchCache[i]
         if pat != None && pat != ""
-            if StringUtil.Find(nameLower, StringUtil.ToLower(pat)) != -1
+            String patLower = StringUtil.ToLower(pat)
+            if StringUtil.Find(nameLower, patLower) != -1
                 acc += gearNameBonusCache[i]
             endif
         endif
         i += 1
     endWhile
 
-    ; optional per-piece cap if you want (example 60.0)
+    ; optional per-piece cap
     if acc < 0.0
         acc = 0.0
     elseif acc > 60.0
@@ -1067,7 +1072,6 @@ Float Function GetNameBonusForItem(Form akItem)
     endif
     return acc
 EndFunction
-
 
 Float Function GetLegacyWarmthBonus(String lowerName)
   if lowerName == ""
@@ -1183,7 +1187,7 @@ Function EnsureNameBonusCache(bool forceReload = False)
         return
     endif
 
-    ; Pull arrays SAFELY (never returns None)
+    ; SAFELY pull arrays from JSON (never None)
     String[] nbMatches = SS_JsonHelpers.GetStringArraySafe(_configPath, ".gear.nameBonuses.matches")
     Float[]  nbValues  = SS_JsonHelpers.GetFloatArraySafe(_configPath,  ".gear.nameBonuses.values")
 
@@ -1214,7 +1218,6 @@ Function EnsureNameBonusCache(bool forceReload = False)
 
     gearNameCacheValid = True
 EndFunction
-
 
 Bool Function ShouldForceNameBonusReload(String source)
   if source == ""
