@@ -4,6 +4,7 @@
 ; Requirements: SKSE64, PapyrusUtil SE 4.4+ (psc stubs on compile path)
 ; Attach: None (utility). Import where needed.
 Scriptname SS_JsonHelpers
+Import JsonUtil
 
 String[] Function GetStringArraySafe(String file, String jpath) Global
     String[] arr = None
