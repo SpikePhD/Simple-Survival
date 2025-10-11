@@ -1030,7 +1030,7 @@ Float Function GetNameBonusForItem(Form akItem)
     endif
 
     ; case-insensitive substring match (adjust later if you add token/boundary mode)
-    String nameLower = StringUtil.ToLower(n)
+    String nameLower = NormalizeWarmthName(n)
 
     Float acc = 0.0
     int i = 0
@@ -1039,6 +1039,7 @@ Float Function GetNameBonusForItem(Form akItem)
         String trimmedPat = TrimWhitespace(pat)
         if trimmedPat != ""
             String patLower = StringUtil.ToLower(trimmedPat)
+            String patLower = NormalizeWarmthName(trimmedPat)
             if StringUtil.Find(nameLower, patLower) != -1
                 acc += gearNameBonusCache[i]
             endif
@@ -1205,6 +1206,68 @@ Bool Function ShouldForceNameBonusReload(String source)
     if source == ""
         return False
     endif
+
+    if SourceIncludes(source, "MCM")
+        return True
+    endif
+    if SourceIncludes(source, "Refresh")
+        return True
+    endif
+    if SourceIncludes(source, "Init")
+        return True
+    endif
+    if SourceIncludes(source, "LoadGame")
+        return True
+    endif
+    if SourceIncludes(source, "QuickTick")
+        return True
+    endif
+    if SourceIncludes(source, "FastTick")
+        return True
+    endif
+
+    return False
+EndFunction
+
+Bool Function IsWhitespaceChar(String ch)
+  if ch == " "
+    return True
+  endif
+  if ch == "\t"
+    return True
+  endif
+  if ch == "\n"
+    return True
+  endif
+  if ch == "\r"
+    return True
+  endif
+  return False
+EndFunction
+
+String Function TrimWhitespace(String value)
+  if value == ""
+    return value
+  endif
+
+  Int startIndex = 0
+  Int endIndex = StringUtil.GetLength(value) - 1
+
+  while startIndex <= endIndex && IsWhitespaceChar(StringUtil.GetNthChar(value, startIndex))
+    startIndex += 1
+  endwhile
+
+  while endIndex >= startIndex && IsWhitespaceChar(StringUtil.GetNthChar(value, endIndex))
+    endIndex -= 1
+  endwhile
+
+  if startIndex > endIndex
+    return ""
+  endif
+
+  Int length = endIndex - startIndex + 1
+  return StringUtil.SubString(value, startIndex, length)
+EndFunction
 
     if SourceIncludes(source, "MCM")
         return True
