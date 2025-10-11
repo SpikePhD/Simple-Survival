@@ -49,9 +49,9 @@ Event OnSleepStop(Bool abInterrupted)
 
   SS_Controller controller = ResolveController()
   if controller != None
-    Bool debugEnabled = controller.DebugEnabled
-    cachedDebugTraceEnabled = debugEnabled
-    if debugEnabled
+    Bool localDebugEnabled = controller.DebugEnabled
+    cachedDebugTraceEnabled = localDebugEnabled
+    if localDebugEnabled
       Debug.Trace("[SS] PlayerEvents: Sleep ended (" + hoursSlept + "h) -> refresh")
     endif
     controller.NotifySleepComplete(hoursSlept)
@@ -122,9 +122,9 @@ Function TriggerEnvironmentRefresh(String source = "", SS_Controller cachedContr
     controller = ResolveController()
   endif
   if controller != None
-    Bool debugEnabled = controller.DebugEnabled
-    cachedDebugTraceEnabled = debugEnabled
-    if source != "" && debugEnabled
+    Bool localDebugEnabled = controller.DebugEnabled
+    cachedDebugTraceEnabled = localDebugEnabled
+    if source != "" && localDebugEnabled
       Debug.Trace("[SS] PlayerEvents: " + source + " -> refresh")
     endif
     controller.RequestEnvironmentEvaluate(source)
