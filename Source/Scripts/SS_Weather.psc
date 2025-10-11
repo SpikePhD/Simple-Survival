@@ -30,8 +30,14 @@ Int   lastRegionBucket = -99
 Int   lastWeatherClass = -99
 
 ; --- Debug ---
-Bool  bDebugEnabled = False
-Bool  bTraceLogs    = False
+Bool  bDebugNotifications = False
+Bool  bTraceLogs          = False
+
+Bool Property DebugEnabled Hidden
+  Bool Function Get()
+    return bTraceLogs
+  EndFunction
+EndProperty
 
 ; --- Cadence control (adaptive) ---
 Bool  bAdaptiveTick = True       ; can expose via MCM later
@@ -201,7 +207,7 @@ Function EvaluateWeather(String source = "Tick")
   String newWorldspaceName = ResolveWorldspaceName(currentWorldspace)
   Weather currentWeather = Weather.GetCurrentWeather()
 
-  if bTraceLogs
+  if DebugEnabled
     Debug.Trace("[SS] EvaluateWeather (" + source + ")")
   endif
 
@@ -260,7 +266,7 @@ Function EvaluateWeather(String source = "Tick")
       ModEvent.PushString(tierEvent, source)
       ModEvent.Send(tierEvent)
 
-      if bTraceLogs
+      if DebugEnabled
         Debug.Trace("[SS] Sent SS_TierChanged | tier=" + preparednessTier + " source=" + source)
       endif
     endif
@@ -282,16 +288,16 @@ Function EvaluateWeather(String source = "Tick")
       ModEvent.PushInt(h, tierPayload)
       ModEvent.Send(h)
 
-      if bDebugEnabled
+      if bDebugNotifications
         String debugMsg = "[SS] warm=" + warmth + " / req=" + baseRequirement + " + modifiers=" + modifierSum + " => " + safeReq + " | def=" + deficit + " | hpPen=" + healthPenaltyPct + "% spdPen=" + speedPenaltyPct + "%"
-        if bTraceLogs
+        if DebugEnabled
           Debug.Trace(debugMsg)
         else
           Debug.Notification(debugMsg)
         endif
       endif
 
-      if bTraceLogs
+      if DebugEnabled
         String traceMsg = "[SS] Sent SS_SetCold | hp=" + healthPenaltyPct + "% st=" + staminaPenaltyPct + "% mg=" + magickaPenaltyPct + "% speed=" + speedPenaltyPct + "%"
         if tierPayload != -1
           traceMsg = traceMsg + " tier=" + tierPayload
@@ -316,10 +322,10 @@ Function EvaluateWeather(String source = "Tick")
       int h2 = ModEvent.Create("SS_ClearCold")
       if h2
         ModEvent.Send(h2)
-        if bDebugEnabled
+        if bDebugNotifications
           Debug.Notification("[SS] cold OFF -> clear penalties")
         endif
-        if bTraceLogs
+        if DebugEnabled
           Debug.Trace("[SS] Sent SS_ClearCold")
         endif
       endif
@@ -426,15 +432,15 @@ Function ApplyColdResourceDrain(Actor p)
           endif
           if drain > 0.0
             p.DamageActorValue(av, drain)
-            if bTraceLogs
+            if DebugEnabled
               Debug.Trace("[SS] Cold drain " + av + ": current=" + current + " max=" + maxValue + " drain=" + drain + " floor=" + floorValue)
             endif
           endif
-        elseif bTraceLogs
+        elseif DebugEnabled
           Debug.Trace("[SS] Cold drain skipped for " + av + " (at or below floor)")
         endif
       endif
-    elseif bTraceLogs
+    elseif DebugEnabled
       Debug.Trace("[SS] Cold drain skipped for " + av + " (percent=" + percent + ")")
     endif
     i += 1
@@ -455,7 +461,7 @@ Function EnsurePlayerHasAbility()
   endif
   if !p.HasSpell(SS_PlayerAbility)
     p.AddSpell(SS_PlayerAbility, False)
-    if bTraceLogs
+    if DebugEnabled
       Debug.Trace("[SS] Gave player SS_PlayerAbility")
     endif
   endif
@@ -715,7 +721,7 @@ Function DispatchToast(String label, String detail, String category)
 
   Debug.Notification(toastMessage)
 
-  if bTraceLogs
+  if DebugEnabled
     Debug.Trace("[SS][" + category + "] " + toastMessage)
   endif
 EndFunction
@@ -1544,17 +1550,17 @@ Function InitConfigDefaults()
 EndFunction
 
 Event OnQuickTick(String speedStr, Float regenMult)
-  if bTraceLogs
+  if DebugEnabled
     Debug.Trace("[SS] QuickTick request received -> evaluate")
   endif
   RequestEvaluate("QuickTick", True)
 EndEvent
 
 Function ApplyDebugFlags()
-  bDebugEnabled = GetB("debug.enable", False)
-  bTraceLogs    = GetB("debug.trace", False)
-  if bTraceLogs
-    Debug.Trace("[SS] Controller init: debug=" + bDebugEnabled + " trace=1")
+  bDebugNotifications = GetB("debug.enable", False)
+  bTraceLogs          = GetB("debug.trace", False)
+  if DebugEnabled
+    Debug.Trace("[SS] Controller init: debug=" + bDebugNotifications + " trace=1")
   endif
 
 EndFunction
