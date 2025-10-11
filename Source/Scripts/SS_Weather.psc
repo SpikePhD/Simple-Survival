@@ -22,6 +22,7 @@ Float Property LastWarmth Auto
 Float Property LastSafeRequirement Auto
 Float Property LastWeatherBonus Auto
 Float Property LastBaseRequirement Auto
+Float Property LastCoveragePercent Auto
 Int   Property LastHealthPenalty Auto
 Int   Property LastStaminaPenalty Auto
 Int   Property LastMagickaPenalty Auto
@@ -187,6 +188,7 @@ Function EvaluateWeather(String source = "Tick")
     LastSafeRequirement = 0.0
     LastWeatherBonus = 0.0
     LastBaseRequirement = 0.0
+    LastCoveragePercent = 100.0
     LastHealthPenalty  = 0
     LastStaminaPenalty = 0
     LastMagickaPenalty = 0
@@ -256,7 +258,9 @@ Function EvaluateWeather(String source = "Tick")
   LastStaminaPenalty = staminaPenaltyPct
   LastMagickaPenalty = magickaPenaltyPct
   LastSpeedPenalty   = speedPenaltyPct
-  Int preparednessTier = DeterminePreparednessTier(warmth, safeReq)
+  Float coveragePercent = ComputeCoveragePercent(warmth, safeReq)
+  LastCoveragePercent = coveragePercent
+  Int preparednessTier = DetermineCoverageTier(coveragePercent)
   Bool preparednessTierChanged = (preparednessTier != lastPreparednessTier)
 
   if useTierSystem && preparednessTierChanged
@@ -613,33 +617,68 @@ String Function FormatWeatherName(Weather weatherForm)
   return label
 EndFunction
 
-Int Function DeterminePreparednessTier(Float warmth, Float safeRequirement)
-  if safeRequirement <= 0.0
-    return 4
+Float Function ComputeCoveragePercent(Float playerWarmth, Float environmentRequirement)
+  Float coverage = 100.0
+
+  Float requirement = environmentRequirement
+  if requirement < 0.0
+    requirement = 0.0
   endif
 
-  Float ratio = warmth / safeRequirement
-  if ratio < 0.25
-    return 0
-  elseif ratio < 0.50
-    return 1
-  elseif ratio < 0.75
-    return 2
-  elseif ratio < 1.0
-    return 3
+  if requirement > 0.001
+    coverage = 0.0
+    if playerWarmth > 0.0
+      coverage = (playerWarmth / requirement) * 100.0
+    endif
   endif
-  return 4
+
+  if coverage < 0.0
+    coverage = 0.0
+  elseif coverage > 100.0
+    coverage = 100.0
+  endif
+
+  return coverage
+EndFunction
+
+Int Function DetermineCoverageTier(Float coveragePercent)
+  Float normalized = coveragePercent
+  if normalized < 0.0
+    normalized = 0.0
+  elseif normalized > 100.0
+    normalized = 100.0
+  endif
+
+  if normalized >= 100.0
+    return 0
+  elseif normalized >= 75.0
+    return 1
+  elseif normalized >= 50.0
+    return 2
+  elseif normalized >= 25.0
+    return 3
+  elseif normalized >= 1.0
+    return 4
+  endif
+  return 5
+EndFunction
+
+Int Function DeterminePreparednessTier(Float warmth, Float safeRequirement)
+  Float coverage = ComputeCoveragePercent(warmth, safeRequirement)
+  return DetermineCoverageTier(coverage)
 EndFunction
 
 String Function GetPreparednessToastMessage(Int tier)
-  if tier <= 0
+  if tier >= 5
     return "I am freezing!"
-  elseif tier == 1
+  elseif tier == 4
     return "I am cold!"
-  elseif tier == 2
-    return "I feel the breeze."
   elseif tier == 3
+    return "I feel the breeze."
+  elseif tier == 2
     return "I am a bit under-dressed."
+  elseif tier == 1
+    return "I should add another layer."
   endif
   return "I am comfortable."
 EndFunction
@@ -688,6 +727,14 @@ EndFunction
 
 Int Function GetLastPreparednessTier()
   return lastPreparednessTier
+EndFunction
+
+Int Function GetCurrentWeatherTier() Global
+  return lastPreparednessTier
+EndFunction
+
+Float Function GetLastCoveragePercent() Global
+  return LastCoveragePercent
 EndFunction
 
 Function DispatchToast(String label, String detail, String category)
