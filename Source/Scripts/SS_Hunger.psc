@@ -786,19 +786,24 @@ Keyword[] Function BuildKeywordArrayFromFormList(FormList keywordList)
 EndFunction
 
 Keyword[] Function AppendKeywordToArray(Keyword[] sourceArray, Keyword newKeyword)
+  Int length = 0
+  Int index = 0
+  Keyword[] expanded = None
+  Keyword[] firstEntry = None
+
   if newKeyword == None
     return sourceArray
   endif
 
   if sourceArray == None
-    Keyword[] firstEntry = new Keyword[1]
+    firstEntry = new Keyword[1]
     firstEntry[0] = newKeyword
     return firstEntry
   endif
 
-  Int length = sourceArray.Length
-  Keyword[] expanded = new Keyword[length + 1]
-  Int index = 0
+  length = sourceArray.Length
+  expanded = new Keyword[length + 1]
+  index = 0
 
   while index < length
     expanded[index] = sourceArray[index]
