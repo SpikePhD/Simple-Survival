@@ -8,6 +8,16 @@ Import StringUtil
 Import Math
 String Property CFG_PATH = "Data\\SKSE\\Plugins\\SS\\config.json" Auto
 
+; ---------- Name-bonus cache state ----------
+Bool     gearNameCacheValid = False
+Int      gearNameCacheCount = 0
+String[] gearNameMatchCache
+Float[]  gearNameBonusCache
+
+; Path to your JSON config (adjust if yours differs)
+String   _configPath = "Data/SKSE/Plugins/SS/config.json"
+
+
 ; =======================
 ; Ability / Forms / Keywords
 ; =======================
@@ -80,7 +90,6 @@ Float kBaseWarmthCloak = 30.0
 Bool  _cacheReady = False
 Bool  gearNameCaseInsensitive = True
 Float gearNameBonusClamp = 0.0
-Int   gearNameCacheCount = 0
 Bool  gearNameUseLegacyFallback = False
 String[] _nameBonusKeys
 Float[]  _nameBonusVals
@@ -1020,53 +1029,45 @@ Float Function ComputePieceWarmth(Actor wearer, Int slotMask, Float baseWarmth, 
   return warmth
 EndFunction
 
-Float Function GetNameBonusForItem(Form item)
-  if item == None
-    return 0.0
-  endif
-
-  EnsureNameBonusCache(False)
-
-  if !_cacheReady
-    return 0.0
-  endif
-
-  String rawName = item.GetName()
-  if rawName == ""
-    return 0.0
-  endif
-
-  String comparisonName = rawName
-  if gearNameCaseInsensitive
-    comparisonName = NormalizeWarmthName(rawName)
-  endif
-
-  Float bonus = 0.0
-
-  if gearNameCacheCount > 0 && _nameBonusKeys != None && _nameBonusVals != None
-    Int index = 0
-    while index < gearNameCacheCount
-      String matchToken = _nameBonusKeys[index]
-      if matchToken != "" && StringUtil.Find(comparisonName, matchToken) >= 0
-        bonus += _nameBonusVals[index]
-      endif
-      index += 1
-    endwhile
-
-    if gearNameBonusClamp > 0.0 && bonus > gearNameBonusClamp
-      bonus = gearNameBonusClamp
+Float Function GetNameBonusForItem(Form akItem)
+    if akItem == None
+        return 0.0
     endif
 
-    return bonus
-  endif
+    EnsureNameBonusCache(False)
+    if !gearNameCacheValid || gearNameCacheCount <= 0
+        return 0.0
+    endif
 
-  if gearNameUseLegacyFallback
-    String loweredName = NormalizeWarmthName(rawName)
-    return GetLegacyWarmthBonus(loweredName)
-  endif
+    String n = akItem.GetName()
+    if n == None || n == ""
+        return 0.0
+    endif
 
-  return 0.0
+    ; case-insensitive simple substring match (swap for token/boundary if you added that)
+    String nameLower = StringUtil.ToLower(n)
+
+    Float acc = 0.0
+    int i = 0
+    while i < gearNameCacheCount
+        String pat = gearNameMatchCache[i]
+        if pat != None && pat != ""
+            if StringUtil.Find(nameLower, StringUtil.ToLower(pat)) != -1
+                acc += gearNameBonusCache[i]
+            endif
+        endif
+        i += 1
+    endWhile
+
+    ; optional per-piece cap if you want (example 60.0)
+    if acc < 0.0
+        acc = 0.0
+    elseif acc > 60.0
+        acc = 60.0
+    endif
+    return acc
 EndFunction
+
 
 Float Function GetLegacyWarmthBonus(String lowerName)
   if lowerName == ""
@@ -1171,55 +1172,47 @@ Float Function GetLegacyWarmthBonus(String lowerName)
 EndFunction
 
 Function InvalidateNameBonusCache()
-  _cacheReady = False
-  gearNameCacheCount = 0
-  _nameBonusKeys = None
-  _nameBonusVals = None
-  gearNameUseLegacyFallback = False
-  gearNameBonusClamp = 0.0
+    gearNameCacheValid = False
+    gearNameCacheCount = 0
+    gearNameMatchCache = None
+    gearNameBonusCache = None
 EndFunction
 
 Function EnsureNameBonusCache(bool forceReload = False)
-	if gearNameCacheValid && !forceReload
-		return
-	endif
+    if gearNameCacheValid && !forceReload
+        return
+    endif
 
-	; Pull arrays SAFELY from JSON (never None)
-	String[] nbMatches = SS_JsonHelpers.GetStringArraySafe(_configPath, ".gear.nameBonuses.matches")
-	Float[]  nbValues  = SS_JsonHelpers.GetFloatArraySafe(_configPath,  ".gear.nameBonuses.values")
+    ; Pull arrays SAFELY (never returns None)
+    String[] nbMatches = SS_JsonHelpers.GetStringArraySafe(_configPath, ".gear.nameBonuses.matches")
+    Float[]  nbValues  = SS_JsonHelpers.GetFloatArraySafe(_configPath,  ".gear.nameBonuses.values")
 
-	; Empty or missing config -> disable cache harmlessly
-	if nbMatches.Length == 0 || nbValues.Length == 0
-		gearNameCacheValid = False
-		gearNameCacheCount = 0
-		gearNameMatchCache = None
-		gearNameBonusCache = None
-		return
-	endif
+    ; Empty / missing config -> disable cache harmlessly
+    if nbMatches.Length == 0 || nbValues.Length == 0
+        InvalidateNameBonusCache()
+        return
+    endif
 
-	; Mismatched lengths -> disable cache safely
-	if nbMatches.Length != nbValues.Length
-		Debug.Trace("[SS] NameBonus: length mismatch, disabling cache")
-		gearNameCacheValid = False
-		gearNameCacheCount = 0
-		gearNameMatchCache = None
-		gearNameBonusCache = None
-		return
-	endif
+    ; Mismatched lengths -> disable cache safely
+    if nbMatches.Length != nbValues.Length
+        Debug.Trace("[SS] NameBonus: length mismatch; disabling cache")
+        InvalidateNameBonusCache()
+        return
+    endif
 
-	; Build final typed arrays
-	gearNameCacheCount = nbMatches.Length
-	gearNameMatchCache = Utility.CreateStringArray(gearNameCacheCount)
-	gearNameBonusCache = Utility.CreateFloatArray(gearNameCacheCount)
+    ; Build final typed arrays
+    gearNameCacheCount = nbMatches.Length
+    gearNameMatchCache = Utility.CreateStringArray(gearNameCacheCount)
+    gearNameBonusCache = Utility.CreateFloatArray(gearNameCacheCount)
 
-	int i = 0
-	while i < gearNameCacheCount
-		gearNameMatchCache[i] = nbMatches[i]
-		gearNameBonusCache[i] = nbValues[i]
-		i += 1
-	endWhile
+    int i = 0
+    while i < gearNameCacheCount
+        gearNameMatchCache[i] = nbMatches[i]
+        gearNameBonusCache[i] = nbValues[i]
+        i += 1
+    endWhile
 
-	gearNameCacheValid = True
+    gearNameCacheValid = True
 EndFunction
 
 
