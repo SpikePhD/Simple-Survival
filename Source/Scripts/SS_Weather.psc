@@ -729,11 +729,11 @@ Int Function GetLastPreparednessTier()
   return lastPreparednessTier
 EndFunction
 
-Int Function GetCurrentWeatherTier() Global
+Int Function GetCurrentWeatherTier()
   return lastPreparednessTier
 EndFunction
 
-Float Function GetLastCoveragePercent() Global
+Float Function GetLastCoveragePercent()
   return LastCoveragePercent
 EndFunction
 

@@ -404,11 +404,11 @@ String Function GetHungerTierToastMessage(Int tier)
   return tierLine
 EndFunction
 
-Int Function GetCurrentHungerTier() Global
+Int Function GetCurrentHungerTier()
   return lastHungerTier
 EndFunction
 
-Int Function GetCurrentHungerPoints() Global
+Int Function GetCurrentHungerPoints()
   return lastHungerValue
 EndFunction
 
@@ -710,13 +710,11 @@ Function LoadFoodConsumptionConfig()
     Keyword keywordEntry = ResolveKeyword(keywordName)
 
     if keywordEntry != None
-      Keyword[] appendArray = new Keyword[1]
-      appendArray[0] = keywordEntry
-
       if extraFoodKeywords == None
-        extraFoodKeywords = appendArray
+        extraFoodKeywords = new Keyword[1]
+        extraFoodKeywords[0] = keywordEntry
       else
-        extraFoodKeywords = extraFoodKeywords + appendArray
+        extraFoodKeywords = extraFoodKeywords + keywordEntry
       endif
 
       extraFoodKeywordCount += 1
@@ -761,13 +759,11 @@ Keyword[] Function BuildKeywordArrayFromFormList(FormList keywordList)
     Keyword keywordEntry = entryForm as Keyword
 
     if keywordEntry != None
-      Keyword[] appendArray = new Keyword[1]
-      appendArray[0] = keywordEntry
-
       if result == None
-        result = appendArray
+        result = new Keyword[1]
+        result[0] = keywordEntry
       else
-        result = result + appendArray
+        result = result + keywordEntry
       endif
 
       appended += 1
