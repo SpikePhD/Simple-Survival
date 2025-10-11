@@ -1038,6 +1038,7 @@ Float Function GetNameBonusForItem(Form akItem)
         String pat = gearNameMatchCache[i]
         String trimmedPat = TrimWhitespace(pat)
         if trimmedPat != ""
+            String patLower = StringUtil.ToLower(trimmedPat)
             String patLower = NormalizeWarmthName(trimmedPat)
             if StringUtil.Find(nameLower, patLower) != -1
                 acc += gearNameBonusCache[i]
@@ -1268,29 +1269,26 @@ String Function TrimWhitespace(String value)
   return StringUtil.SubString(value, startIndex, length)
 EndFunction
 
-String Function NormalizeWarmthName(String rawName)
-  if rawName == ""
-    return rawName
-  endif
-
-  String uppercaseChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-  String lowercaseChars = "abcdefghijklmnopqrstuvwxyz"
-  Int nameLength = StringUtil.GetLength(rawName)
-  Int index = 0
-  String normalizedName = ""
-  while index < nameLength
-    String currentChar = StringUtil.GetNthChar(rawName, index)
-    Int uppercaseIndex = StringUtil.Find(uppercaseChars, currentChar)
-    if uppercaseIndex >= 0
-      String lowerChar = StringUtil.GetNthChar(lowercaseChars, uppercaseIndex)
-      normalizedName += lowerChar
-    else
-      normalizedName += currentChar
+    if SourceIncludes(source, "MCM")
+        return True
     endif
-    index += 1
-  endwhile
+    if SourceIncludes(source, "Refresh")
+        return True
+    endif
+    if SourceIncludes(source, "Init")
+        return True
+    endif
+    if SourceIncludes(source, "LoadGame")
+        return True
+    endif
+    if SourceIncludes(source, "QuickTick")
+        return True
+    endif
+    if SourceIncludes(source, "FastTick")
+        return True
+    endif
 
-  return normalizedName
+    return False
 EndFunction
 
 ; =======================
