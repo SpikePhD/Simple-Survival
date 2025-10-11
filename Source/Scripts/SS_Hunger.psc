@@ -800,10 +800,6 @@ Keyword[] Function BuildKeywordArrayFromFormList(FormList keywordList)
 EndFunction
 
 Keyword[] Function AppendKeywordToArray(Keyword[] sourceArray, Keyword newKeyword)
-  Int sourceCount = 0
-  Int newSize = 0
-  Int index = 0
-  Keyword[] expanded = None
   Keyword[] firstEntry = None
 
   if newKeyword == None
@@ -817,18 +813,6 @@ Keyword[] Function AppendKeywordToArray(Keyword[] sourceArray, Keyword newKeywor
   endif
 
   return sourceArray + newKeyword
-  sourceCount = sourceArray.Length
-  newSize = sourceCount + 1
-  expanded = new Keyword[newSize]
-  index = 0
-
-  while index < sourceCount
-    expanded[index] = sourceArray[index]
-    index += 1
-  endwhile
-
-  expanded[sourceCount] = newKeyword
-  return expanded
 EndFunction
 
 Function LoadFoodValueBands()
