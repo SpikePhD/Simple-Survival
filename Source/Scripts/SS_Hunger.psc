@@ -788,8 +788,6 @@ EndFunction
 Keyword[] Function AppendKeywordToArray(Keyword[] sourceArray, Keyword newKeyword)
   Int sourceCount = 0
   Int newSize = 0
-  Int lastIndex = 0
-  Int sourceLength = 0
   Int index = 0
   Keyword[] expanded = None
   Keyword[] firstEntry = None
@@ -806,22 +804,15 @@ Keyword[] Function AppendKeywordToArray(Keyword[] sourceArray, Keyword newKeywor
 
   sourceCount = sourceArray.Length
   newSize = sourceCount + 1
-  lastIndex = newSize - 1
   expanded = new Keyword[newSize]
   index = 0
 
   while index < sourceCount
-  sourceLength = sourceArray.Length
-  expanded = new Keyword[sourceLength + 1]
-  index = 0
-
-  while index < sourceLength
     expanded[index] = sourceArray[index]
     index += 1
   endwhile
 
-  expanded[lastIndex] = newKeyword
-  expanded[sourceLength] = newKeyword
+  expanded[sourceCount] = newKeyword
   return expanded
 EndFunction
 
