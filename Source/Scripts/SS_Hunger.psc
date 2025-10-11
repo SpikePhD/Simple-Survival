@@ -688,12 +688,17 @@ Function LoadFoodConsumptionConfig()
     rawFoodFactor = 0.0
   endif
 
-  Keyword[] propertyKeywords = BuildKeywordArrayFromFormList(FoodKeywordList)
-  extraFoodKeywords = propertyKeywords
-  if extraFoodKeywords != None
-    extraFoodKeywordCount = extraFoodKeywords.Length
-  else
-    extraFoodKeywordCount = 0
+  Int entryLimit = 128
+  extraFoodKeywords = None
+  extraFoodKeywordCount = 0
+
+  if FoodKeywordList != None
+    Keyword[] propertyBuffer = new Keyword[128]
+    Int propertyCount = CopyKeywordListToBuffer(FoodKeywordList, propertyBuffer, entryLimit)
+    if propertyCount > 0
+      extraFoodKeywords = propertyBuffer
+      extraFoodKeywordCount = propertyCount
+    endif
   endif
 
   Int configuredCount = JsonUtil.PathCount(CFG_PATH, "hunger.food.extraKeywords")
@@ -701,10 +706,7 @@ Function LoadFoodConsumptionConfig()
     configuredCount = 0
   endif
 
-  Int entryLimit = 128
   Int i = 0
-  Int previousCount = 0
-  Int newCount = 0
 
   while i < configuredCount && extraFoodKeywordCount < entryLimit
     String basePath = "hunger.food.extraKeywords[" + IntToString(i) + "]"
@@ -712,20 +714,13 @@ Function LoadFoodConsumptionConfig()
     Keyword keywordEntry = ResolveKeyword(keywordName)
 
     if keywordEntry != None
-      if extraFoodKeywords != None
-        previousCount = extraFoodKeywords.Length
-      else
-        previousCount = 0
+      if extraFoodKeywords == None
+        extraFoodKeywords = new Keyword[128]
+        extraFoodKeywordCount = 0
       endif
 
-      extraFoodKeywords = AppendKeywordToArray(extraFoodKeywords, keywordEntry)
-
-      if extraFoodKeywords != None
-        newCount = extraFoodKeywords.Length
-        if newCount > previousCount
-          extraFoodKeywordCount += 1
-        endif
-      endif
+      extraFoodKeywords[extraFoodKeywordCount] = keywordEntry
+      extraFoodKeywordCount += 1
     endif
 
     i += 1
@@ -736,87 +731,43 @@ Function LoadFoodConsumptionConfig()
     TraceHunger("Extra food keyword list hit the Papyrus 128 entry limit, ignoring additional entries.")
   endif
 
-  ; If we didn’t add anything, revert to None to keep your later checks intact
+  ; If we didn't add anything, revert to None to keep your later checks intact
   if extraFoodKeywordCount <= 0
     extraFoodKeywords = None
     extraFoodKeywordCount = 0
-  elseif extraFoodKeywords != None
-    extraFoodKeywordCount = extraFoodKeywords.Length
   endif
 
   LoadFoodValueBands()
 EndFunction
 
-Keyword[] Function BuildKeywordArrayFromFormList(FormList keywordList)
-  if keywordList == None
-    return None
+Int Function CopyKeywordListToBuffer(FormList keywordList, Keyword[] targetArray, Int maxCount)
+  if keywordList == None || targetArray == None || maxCount <= 0
+    return 0
   endif
 
-  Int entryLimit = 128
   Int listSize = keywordList.GetSize()
-  Int previousCount = 0
-  Int newCount = 0
   if listSize <= 0
-    return None
+    return 0
   endif
 
-  Keyword[] result = None
-  Int appended = 0
   Int index = 0
+  Int appended = 0
 
-  while index < listSize && appended < entryLimit
-    Form entryForm = keywordList.GetAt(index)
-    Keyword keywordEntry = entryForm as Keyword
-
+  while index < listSize && appended < maxCount
+    Keyword keywordEntry = keywordList.GetAt(index) as Keyword
     if keywordEntry != None
-      if result != None
-        previousCount = result.Length
-      else
-        previousCount = 0
-      endif
-
-      result = AppendKeywordToArray(result, keywordEntry)
-
-      if result != None
-        newCount = result.Length
-        if newCount > previousCount
-          appended += 1
-        endif
-      endif
+      targetArray[appended] = keywordEntry
+      appended += 1
     endif
 
     index += 1
   endwhile
 
-  if appended <= 0
-    return None
-  endif
-
   if index < listSize
     TraceHunger("Food keyword list property hit the Papyrus 128 entry limit, ignoring additional entries.")
   endif
 
-  return result
-EndFunction
-
-Keyword[] Function AppendKeywordToArray(Keyword[] sourceArray, Keyword newKeyword)
-  Keyword[] firstEntry = None
-
-  if newKeyword == None
-    return sourceArray
-  endif
-
-  if sourceArray == None
-    firstEntry = new Keyword[1]
-    firstEntry[0] = newKeyword
-    return firstEntry
-  endif
-
-  Keyword[] appendEntry = new Keyword[1]
-  appendEntry[0] = newKeyword
-
-  return sourceArray + appendEntry
-  return sourceArray + newKeyword
+  return appended
 EndFunction
 
 Function LoadFoodValueBands()
