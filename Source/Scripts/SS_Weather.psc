@@ -232,25 +232,6 @@ Function EvaluateWeather(String source = "Tick")
   Float autoPer   = GetF("weather.cold.autoWarmthPerPiece", 100.0)
   Float coldTick  = GetF("weather.cold.tick", 0.0) ; optional hp bleed per tick at max deficit
 
-Int entryCount = matches.Length
-if entryCount <= 0 || values.Length <= 0
-  ; No config present -> keep cache invalid but harmless
-  gearNameCacheValid = False
-  gearNameCacheCount = 0
-  gearNameMatchCache = None
-  gearNameBonusCache = None
-  return
-endif
-
-if values.Length != entryCount
-  ; Mismatched lengths -> disable cache safely
-  gearNameCacheValid = False
-  gearNameCacheCount = 0
-  gearNameMatchCache = None
-  gearNameBonusCache = None
-  return
-endif
-
   EnsureNameBonusCache(ShouldForceNameBonusReload(source))
 
   LastBaseRequirement = baseRequirement
@@ -1040,23 +1021,24 @@ Float Function GetNameBonusForItem(Form akItem)
     endif
 
     String n = akItem.GetName()
-    if n == None
+    if n == ""
         return 0.0
     endif
-    n = StringUtil.Trim(n)
+    n = TrimWhitespace(n)
     if n == ""
         return 0.0
     endif
 
     ; case-insensitive substring match (adjust later if you add token/boundary mode)
-    String nameLower = StringUtil.ToLower(n)
+    String nameLower = NormalizeWarmthName(n)
 
     Float acc = 0.0
     int i = 0
     while i < gearNameCacheCount
         String pat = gearNameMatchCache[i]
-        if pat != None && pat != ""
-            String patLower = StringUtil.ToLower(pat)
+        String trimmedPat = TrimWhitespace(pat)
+        if trimmedPat != ""
+            String patLower = NormalizeWarmthName(trimmedPat)
             if StringUtil.Find(nameLower, patLower) != -1
                 acc += gearNameBonusCache[i]
             endif
@@ -1220,30 +1202,30 @@ Function EnsureNameBonusCache(bool forceReload = False)
 EndFunction
 
 Bool Function ShouldForceNameBonusReload(String source)
-  if source == ""
+    if source == ""
+        return False
+    endif
+
+    if SourceIncludes(source, "MCM")
+        return True
+    endif
+    if SourceIncludes(source, "Refresh")
+        return True
+    endif
+    if SourceIncludes(source, "Init")
+        return True
+    endif
+    if SourceIncludes(source, "LoadGame")
+        return True
+    endif
+    if SourceIncludes(source, "QuickTick")
+        return True
+    endif
+    if SourceIncludes(source, "FastTick")
+        return True
+    endif
+
     return False
-  endif
-
-  if SourceIncludes(source, "MCM")
-    return True
-  endif
-  if SourceIncludes(source, "Refresh")
-    return True
-  endif
-  if SourceIncludes(source, "Init")
-    return True
-  endif
-  if SourceIncludes(source, "LoadGame")
-    return True
-  endif
-  if SourceIncludes(source, "QuickTick")
-    return True
-  endif
-  if SourceIncludes(source, "FastTick")
-    return True
-  endif
-
-  return False
 EndFunction
 
 String Function NormalizeWarmthName(String rawName)
