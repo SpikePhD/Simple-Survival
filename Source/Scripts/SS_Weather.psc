@@ -6,6 +6,7 @@ Scriptname SS_Weather extends Quest
 Import JsonUtil
 Import StringUtil
 Import Math
+Import SS_JsonHelpers
 String Property CFG_PATH = "Data\\SKSE\\Plugins\\SS\\config.json" Auto
 
 ; =======================
@@ -70,13 +71,13 @@ Float kBaseWarmthFeet  = 25.0
 Float kBaseWarmthCloak = 30.0
 
 ; --- Gear warmth name bonus cache ---
-Bool  gearNameCacheValid = False
+Bool  _cacheReady = False
 Bool  gearNameCaseInsensitive = True
 Float gearNameBonusClamp = 0.0
 Int   gearNameCacheCount = 0
 Bool  gearNameUseLegacyFallback = False
-String[] gearNameMatchCache
-Float[]  gearNameBonusCache
+String[] _nameBonusKeys
+Float[]  _nameBonusVals
 
 Function ConfigureModule(Spell ability)
   if ability != None
@@ -93,6 +94,13 @@ EndFunction
 Function RequestEvaluate(String source, Bool forceImmediate = False)
   if source == ""
     source = "RequestFastTick"
+  endif
+
+  if !_cacheReady
+    EnsureNameBonusCache(False)
+    if !_cacheReady
+      return
+    endif
   endif
 
   if forceImmediate
@@ -948,7 +956,7 @@ Float Function GetNameBonusForItem(Form item)
 
   EnsureNameBonusCache(False)
 
-  if !gearNameCacheValid
+  if !_cacheReady
     return 0.0
   endif
 
@@ -964,12 +972,12 @@ Float Function GetNameBonusForItem(Form item)
 
   Float bonus = 0.0
 
-  if gearNameCacheCount > 0 && gearNameMatchCache != None && gearNameBonusCache != None
+  if gearNameCacheCount > 0 && _nameBonusKeys != None && _nameBonusVals != None
     Int index = 0
     while index < gearNameCacheCount
-      String matchToken = gearNameMatchCache[index]
+      String matchToken = _nameBonusKeys[index]
       if matchToken != "" && StringUtil.Find(comparisonName, matchToken) >= 0
-        bonus += gearNameBonusCache[index]
+        bonus += _nameBonusVals[index]
       endif
       index += 1
     endwhile
@@ -1092,24 +1100,20 @@ Float Function GetLegacyWarmthBonus(String lowerName)
 EndFunction
 
 Function InvalidateNameBonusCache()
-  gearNameCacheValid = False
+  _cacheReady = False
   gearNameCacheCount = 0
-  gearNameMatchCache = None
-  gearNameBonusCache = None
+  _nameBonusKeys = None
+  _nameBonusVals = None
   gearNameUseLegacyFallback = False
   gearNameBonusClamp = 0.0
 EndFunction
 
 Function EnsureNameBonusCache(Bool forceReload = False)
-  if gearNameCacheValid && !forceReload
+  if _cacheReady && !forceReload
     return
   endif
 
-  gearNameCacheValid = False
-  gearNameCacheCount = 0
-  gearNameMatchCache = None
-  gearNameBonusCache = None
-  gearNameUseLegacyFallback = False
+  InvalidateNameBonusCache()
 
   gearNameCaseInsensitive = GetB("gear.nameMatchCaseInsensitive", True)
   gearNameBonusClamp = GetF("gear.nameBonusMaxPerItem", 0.0)
@@ -1117,50 +1121,106 @@ Function EnsureNameBonusCache(Bool forceReload = False)
     gearNameBonusClamp = 0.0
   endif
 
-  Int entryCount = JsonUtil.PathCount(CFG_PATH, "gear.nameBonuses")
-  if entryCount == -1
-    gearNameUseLegacyFallback = True
-    entryCount = 0
+  Bool loadedFromArrayPairs = False
+
+  String[] configuredKeys = SS_JsonHelpers.GetStringArraySafe(CFG_PATH, "gear.nameBonusKeys")
+  Float[] configuredValues = SS_JsonHelpers.GetFloatArraySafe(CFG_PATH, "gear.nameBonusVals")
+
+  Int keyCount = 0
+  Int valueCount = 0
+  if configuredKeys != None
+    keyCount = configuredKeys.Length
+  endif
+  if configuredValues != None
+    valueCount = configuredValues.Length
   endif
 
-  if entryCount > 0
-    String[] matches = Utility.CreateStringArray(entryCount)
-    Float[]  values  = Utility.CreateFloatArray(entryCount)
-    Int validCount = 0
-    Int index = 0
-    while index < entryCount
-      String matchPath = "gear.nameBonuses[" + index + "].match"
-      String matchToken = JsonUtil.GetPathStringValue(CFG_PATH, matchPath, "")
-      matchToken = TrimWhitespace(matchToken)
-      String bonusPath = "gear.nameBonuses[" + index + "].bonus"
-      Float bonusValue = JsonUtil.GetPathFloatValue(CFG_PATH, bonusPath, 0.0)
+  if keyCount > 0 && valueCount > 0
+    Int pairCount = keyCount
+    if valueCount < pairCount
+      pairCount = valueCount
+    endif
 
-      if matchToken != "" && bonusValue > 0.0
+    String[] tempKeys = Utility.CreateStringArray(pairCount)
+    Float[]  tempVals = Utility.CreateFloatArray(pairCount)
+    Int validPairCount = 0
+    Int pairIndex = 0
+    while pairIndex < pairCount
+      String currentKey = TrimWhitespace(configuredKeys[pairIndex])
+      Float currentValue = configuredValues[pairIndex]
+
+      if currentKey != "" && currentValue > 0.0
         if gearNameCaseInsensitive
-          matchToken = NormalizeWarmthName(matchToken)
+          currentKey = NormalizeWarmthName(currentKey)
         endif
-        matches[validCount] = matchToken
-        values[validCount] = bonusValue
-        validCount += 1
+        tempKeys[validPairCount] = currentKey
+        tempVals[validPairCount] = currentValue
+        validPairCount += 1
       endif
 
-      index += 1
+      pairIndex += 1
     endwhile
 
-    if validCount > 0
-      gearNameMatchCache = Utility.CreateStringArray(validCount)
-      gearNameBonusCache = Utility.CreateFloatArray(validCount)
-      index = 0
-      while index < validCount
-        gearNameMatchCache[index] = matches[index]
-        gearNameBonusCache[index] = values[index]
-        index += 1
+    if validPairCount > 0
+      _nameBonusKeys = Utility.CreateStringArray(validPairCount)
+      _nameBonusVals = Utility.CreateFloatArray(validPairCount)
+      Int assignIndex = 0
+      while assignIndex < validPairCount
+        _nameBonusKeys[assignIndex] = tempKeys[assignIndex]
+        _nameBonusVals[assignIndex] = tempVals[assignIndex]
+        assignIndex += 1
       endwhile
-      gearNameCacheCount = validCount
+      gearNameCacheCount = validPairCount
+      loadedFromArrayPairs = True
     endif
   endif
 
-  gearNameCacheValid = True
+  if !loadedFromArrayPairs
+    Int entryCount = JsonUtil.PathCount(CFG_PATH, "gear.nameBonuses")
+    if entryCount == -1
+      gearNameUseLegacyFallback = True
+      entryCount = 0
+    endif
+
+    if entryCount > 0
+      String[] matches = Utility.CreateStringArray(entryCount)
+      Float[]  values  = Utility.CreateFloatArray(entryCount)
+      Int validCount = 0
+      Int index = 0
+      while index < entryCount
+        String matchPath = "gear.nameBonuses[" + index + "].match"
+        String matchToken = JsonUtil.GetPathStringValue(CFG_PATH, matchPath, "")
+        matchToken = TrimWhitespace(matchToken)
+        String bonusPath = "gear.nameBonuses[" + index + "].bonus"
+        Float bonusValue = JsonUtil.GetPathFloatValue(CFG_PATH, bonusPath, 0.0)
+
+        if matchToken != "" && bonusValue > 0.0
+          if gearNameCaseInsensitive
+            matchToken = NormalizeWarmthName(matchToken)
+          endif
+          matches[validCount] = matchToken
+          values[validCount] = bonusValue
+          validCount += 1
+        endif
+
+        index += 1
+      endwhile
+
+      if validCount > 0
+        _nameBonusKeys = Utility.CreateStringArray(validCount)
+        _nameBonusVals = Utility.CreateFloatArray(validCount)
+        index = 0
+        while index < validCount
+          _nameBonusKeys[index] = matches[index]
+          _nameBonusVals[index] = values[index]
+          index += 1
+        endwhile
+        gearNameCacheCount = validCount
+      endif
+    endif
+  endif
+
+  _cacheReady = True
 EndFunction
 
 Bool Function ShouldForceNameBonusReload(String source)
