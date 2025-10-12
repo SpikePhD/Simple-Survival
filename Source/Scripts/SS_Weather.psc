@@ -873,7 +873,7 @@ String Function NormalizeWarmthName(String value)
     return ""
   endif
 
-  String lower = ToLowerAscii(trimmed)
+  String lower = StringUtil.ToLower(trimmed)
   Int totalLength = StringUtil.GetLength(lower)
   if totalLength <= 0
     return ""
@@ -1091,11 +1091,13 @@ Float Function GetNameBonusForItem(Form akItem)
   Int i = 0
   while i < gearNameCacheCount
     String pat = gearNameMatchCache[i]
-    String trimmedPat = TrimWhitespace(pat)
-    if trimmedPat != ""
-      String patLower = NormalizeWarmthName(trimmedPat)
-      if patLower != "" && StringUtil.Find(nameLower, patLower) != -1
-        acc += gearNameBonusCache[i]
+    if pat != None
+      String trimmedPat = TrimWhitespace(pat)
+      if trimmedPat != ""
+        String patLower = NormalizeWarmthName(trimmedPat)
+        if StringUtil.Find(nameLower, patLower) != -1
+          acc += gearNameBonusCache[i]
+        endif
       endif
     endif
     i += 1
