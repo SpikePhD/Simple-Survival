@@ -782,6 +782,10 @@ Function DispatchToast(String label, String detail, String category)
 EndFunction
 
 String Function TrimWhitespace(String value)
+  if value == None
+    return ""
+  endif
+
   Int totalLength = StringUtil.GetLength(value)
   if totalLength <= 0
     return ""
@@ -868,6 +872,10 @@ String Function ToLowerAscii(String value)
 EndFunction
 
 String Function NormalizeWarmthName(String value)
+  if value == None
+    return ""
+  endif
+
   String trimmed = TrimWhitespace(value)
   if trimmed == ""
     return ""
@@ -879,18 +887,26 @@ String Function NormalizeWarmthName(String value)
     return ""
   endif
 
+  String uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  String lowercase = "abcdefghijklmnopqrstuvwxyz"
   String normalized = ""
   Bool lastWasSpace = False
   Int idx = 0
   while idx < totalLength
-    String ch = StringUtil.GetNthChar(lower, idx)
-    if IsWhitespaceChar(ch)
+    String ch = StringUtil.GetNthChar(trimmed, idx)
+    Int upperIndex = StringUtil.Find(uppercase, ch)
+    String lowered = ch
+    if upperIndex >= 0
+      lowered = StringUtil.GetNthChar(lowercase, upperIndex)
+    endif
+
+    if IsWhitespaceChar(lowered)
       if !lastWasSpace
         normalized += " "
         lastWasSpace = True
       endif
     else
-      normalized += ch
+      normalized += lowered
       lastWasSpace = False
     endif
     idx += 1
