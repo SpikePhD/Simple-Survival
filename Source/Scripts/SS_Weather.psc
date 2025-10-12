@@ -839,6 +839,34 @@ Bool Function IsWhitespaceChar(String charValue)
   return False
 EndFunction
 
+String Function ToLowerAscii(String value)
+  if value == ""
+    return ""
+  endif
+
+  Int totalLength = StringUtil.GetLength(value)
+  if totalLength <= 0
+    return ""
+  endif
+
+  String uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  String lowercase = "abcdefghijklmnopqrstuvwxyz"
+  String result = ""
+  Int idx = 0
+  while idx < totalLength
+    String ch = StringUtil.GetNthChar(value, idx)
+    Int upperIndex = StringUtil.Find(uppercase, ch)
+    if upperIndex >= 0
+      result += StringUtil.GetNthChar(lowercase, upperIndex)
+    else
+      result += ch
+    endif
+    idx += 1
+  endwhile
+
+  return result
+EndFunction
+
 String Function NormalizeWarmthName(String value)
   String trimmed = TrimWhitespace(value)
   if trimmed == ""
