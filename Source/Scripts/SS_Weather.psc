@@ -839,14 +839,41 @@ Bool Function IsWhitespaceChar(String charValue)
   return False
 EndFunction
 
+String Function ToLowerAscii(String value)
+  if value == ""
+    return ""
+  endif
+
+  Int totalLength = StringUtil.GetLength(value)
+  if totalLength <= 0
+    return ""
+  endif
+
+  String uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  String lowercase = "abcdefghijklmnopqrstuvwxyz"
+  String result = ""
+  Int idx = 0
+  while idx < totalLength
+    String ch = StringUtil.GetNthChar(value, idx)
+    Int upperIndex = StringUtil.Find(uppercase, ch)
+    if upperIndex >= 0
+      result += StringUtil.GetNthChar(lowercase, upperIndex)
+    else
+      result += ch
+    endif
+    idx += 1
+  endwhile
+
+  return result
+EndFunction
+
 String Function NormalizeWarmthName(String value)
   String trimmed = TrimWhitespace(value)
   if trimmed == ""
     return ""
   endif
 
-  String lower = trimmed.ToLower()
-  String lower = StringUtil.ToLower(trimmed)
+  String lower = ToLowerAscii(trimmed)
   Int totalLength = StringUtil.GetLength(lower)
   if totalLength <= 0
     return ""
@@ -1052,10 +1079,6 @@ Float Function GetNameBonusForItem(Form akItem)
   if !gearNameCacheValid || gearNameCacheCount <= 0
     return 0.0
   endif
-    String n = TrimWhitespace(akItem.GetName())
-    if n == ""
-        return 0.0
-    endif
 
   String n = TrimWhitespace(akItem.GetName())
   if n == ""
@@ -1064,22 +1087,6 @@ Float Function GetNameBonusForItem(Form akItem)
 
   ; case-insensitive substring match (adjust later if you add token/boundary mode)
   String nameLower = NormalizeWarmthName(n)
-    Float acc = 0.0
-    Int i = 0
-    while i < gearNameCacheCount
-        String pat = gearNameMatchCache[i]
-        if pat != None
-            String trimmedPat = TrimWhitespace(pat)
-            if trimmedPat != ""
-                String patLower = NormalizeWarmthName(trimmedPat)
-                if StringUtil.Find(nameLower, patLower) != -1
-                    acc += gearNameBonusCache[i]
-                endif
-            endif
-        endif
-        i += 1
-    endWhile
-
   Float acc = 0.0
   Int i = 0
   while i < gearNameCacheCount
@@ -1087,7 +1094,7 @@ Float Function GetNameBonusForItem(Form akItem)
     String trimmedPat = TrimWhitespace(pat)
     if trimmedPat != ""
       String patLower = NormalizeWarmthName(trimmedPat)
-      if StringUtil.Find(nameLower, patLower) != -1
+      if patLower != "" && StringUtil.Find(nameLower, patLower) != -1
         acc += gearNameBonusCache[i]
       endif
     endif
