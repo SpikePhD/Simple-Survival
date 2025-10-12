@@ -1,17 +1,27 @@
 Scriptname SS_Controller extends Quest
 
 Quest Property WeatherQuest Auto
+Quest Property WeatherPlayerQuest Auto
+Quest Property WeatherTierQuest Auto
 Quest Property HungerQuest Auto
 Spell Property SS_PlayerAbility Auto
 
-SS_Weather WeatherModule
+SS_WeatherEnvironment WeatherEnvironmentModule
+SS_WeatherPlayer WeatherPlayerModule
+SS_WeatherTiers WeatherTierModule
 SS_Hunger HungerModule
 Bool bInitialized = False
+Bool bWeatherEventsRegistered = False
+Float cachedEnvWarmth = 0.0
+Float cachedPlayerWarmth = 0.0
 
 Bool Property DebugEnabled Hidden
   Bool Function Get()
-    if WeatherModule != None
-      return WeatherModule.DebugEnabled
+    if WeatherEnvironmentModule != None
+      return WeatherEnvironmentModule.DebugEnabled
+    endif
+    if WeatherPlayerModule != None
+      return WeatherPlayerModule.DebugEnabled
     endif
     if HungerModule != None
       return HungerModule.DebugEnabled
@@ -21,37 +31,99 @@ Bool Property DebugEnabled Hidden
 EndProperty
 
 Event OnInit()
-  InitializeWeatherModule()
-  if WeatherModule != None
-    WeatherModule.ConfigureModule(SS_PlayerAbility)
+  InitializeWeatherModules()
+  if WeatherEnvironmentModule != None
+    WeatherEnvironmentModule.ConfigureModule(SS_PlayerAbility)
+  endif
+  if WeatherPlayerModule != None
+    WeatherPlayerModule.ApplyConfigDefaults()
   endif
   InitializeHungerModule()
+  RegisterWeatherTierEvents()
+  SyncCachedWeatherValues()
+  RefreshPlayerWarmthFromModule("ControllerInit")
+  UpdateWeatherTier("ControllerInit")
   bInitialized = True
 EndEvent
 
 Event OnPlayerLoadGame()
-  InitializeWeatherModule()
-  if WeatherModule != None
-    WeatherModule.ConfigureModule(SS_PlayerAbility)
+  InitializeWeatherModules()
+  if WeatherEnvironmentModule != None
+    WeatherEnvironmentModule.ConfigureModule(SS_PlayerAbility)
+  endif
+  if WeatherPlayerModule != None
+    WeatherPlayerModule.ApplyConfigDefaults()
   endif
   InitializeHungerModule()
+  RegisterWeatherTierEvents()
+  SyncCachedWeatherValues()
+  RefreshPlayerWarmthFromModule("OnPlayerLoadGame")
+  UpdateWeatherTier("OnPlayerLoadGame")
 EndEvent
 
-Function InitializeWeatherModule()
+Function InitializeWeatherModules()
   if WeatherQuest == None
     WeatherQuest = Self
   endif
   if WeatherQuest != None
-    WeatherModule = WeatherQuest as SS_Weather
-  else
-    WeatherModule = None
+    WeatherEnvironmentModule = WeatherQuest as SS_WeatherEnvironment
   endif
+
+  if WeatherPlayerQuest == None
+    WeatherPlayerQuest = WeatherQuest
+  endif
+  if WeatherPlayerQuest != None
+    WeatherPlayerModule = WeatherPlayerQuest as SS_WeatherPlayer
+  endif
+
+  if WeatherTierQuest == None
+    WeatherTierQuest = WeatherQuest
+  endif
+  if WeatherTierQuest != None
+    WeatherTierModule = WeatherTierQuest as SS_WeatherTiers
+  endif
+
+EndFunction
+
+Function RegisterWeatherTierEvents()
+  if bWeatherEventsRegistered
+    return
+  endif
+  RegisterForModEvent("SS_Evt_EnvChanged", "OnEnvironmentChanged")
+  RegisterForModEvent("SS_Evt_PlayerWarmthChanged", "OnPlayerWarmthChanged")
+  bWeatherEventsRegistered = True
+EndFunction
+
+Function SyncCachedWeatherValues()
+  if WeatherEnvironmentModule != None
+    cachedEnvWarmth = WeatherEnvironmentModule.GetEnvironmentalWarmth()
+  endif
+  if WeatherPlayerModule != None
+    cachedPlayerWarmth = WeatherPlayerModule.GetPlayerWarmth()
+  endif
+EndFunction
+
+Function RefreshPlayerWarmthFromModule(String source)
+  if WeatherPlayerModule == None
+    return
+  endif
+  cachedPlayerWarmth = WeatherPlayerModule.RefreshPlayerWarmth(source)
+EndFunction
+
+Function UpdateWeatherTier(String source)
+  if WeatherTierModule == None
+    InitializeWeatherModules()
+    if WeatherTierModule == None
+      return
+    endif
+  endif
+  WeatherTierModule.ComputeTier(cachedPlayerWarmth, cachedEnvWarmth, source)
 EndFunction
 
 Float Property LastWarmth Hidden
   Float Function Get()
-    if WeatherModule != None
-      return WeatherModule.GetLastWarmth()
+    if WeatherPlayerModule != None
+      return WeatherPlayerModule.GetPlayerWarmth()
     endif
     return 0.0
   EndFunction
@@ -59,8 +131,8 @@ EndProperty
 
 Float Property LastSafeRequirement Hidden
   Float Function Get()
-    if WeatherModule != None
-      return WeatherModule.GetLastSafeRequirement()
+    if WeatherEnvironmentModule != None
+      return WeatherEnvironmentModule.GetEnvironmentalWarmth()
     endif
     return 0.0
   EndFunction
@@ -68,8 +140,8 @@ EndProperty
 
 Float Property LastWeatherBonus Hidden
   Float Function Get()
-    if WeatherModule != None
-      return WeatherModule.GetLastWeatherBonus()
+    if WeatherEnvironmentModule != None
+      return WeatherEnvironmentModule.LastWeatherBonus
     endif
     return 0.0
   EndFunction
@@ -77,8 +149,8 @@ EndProperty
 
 Float Property LastBaseRequirement Hidden
   Float Function Get()
-    if WeatherModule != None
-      return WeatherModule.LastBaseRequirement
+    if WeatherEnvironmentModule != None
+      return WeatherEnvironmentModule.LastBaseRequirement
     endif
     return 0.0
   EndFunction
@@ -86,44 +158,32 @@ EndProperty
 
 Int Property LastHealthPenalty Hidden
   Int Function Get()
-    if WeatherModule != None
-      return WeatherModule.LastHealthPenalty
-    endif
     return 0
   EndFunction
 EndProperty
 
 Int Property LastStaminaPenalty Hidden
   Int Function Get()
-    if WeatherModule != None
-      return WeatherModule.LastStaminaPenalty
-    endif
     return 0
   EndFunction
 EndProperty
 
 Int Property LastMagickaPenalty Hidden
   Int Function Get()
-    if WeatherModule != None
-      return WeatherModule.LastMagickaPenalty
-    endif
     return 0
   EndFunction
 EndProperty
 
 Int Property LastSpeedPenalty Hidden
   Int Function Get()
-    if WeatherModule != None
-      return WeatherModule.LastSpeedPenalty
-    endif
     return 0
   EndFunction
 EndProperty
 
 Int Property LastRegionClass Hidden
   Int Function Get()
-    if WeatherModule != None
-      return WeatherModule.GetLastRegionClass()
+    if WeatherEnvironmentModule != None
+      return WeatherEnvironmentModule.GetLastRegionClass()
     endif
     return -1
   EndFunction
@@ -131,8 +191,8 @@ EndProperty
 
 Int Property LastWeatherClass Hidden
   Int Function Get()
-    if WeatherModule != None
-      return WeatherModule.GetLastWeatherClass()
+    if WeatherEnvironmentModule != None
+      return WeatherEnvironmentModule.GetLastWeatherClass()
     endif
     return -1
   EndFunction
@@ -140,8 +200,8 @@ EndProperty
 
 Bool Property LastInteriorState Hidden
   Bool Function Get()
-    if WeatherModule != None
-      return WeatherModule.GetLastInteriorState()
+    if WeatherEnvironmentModule != None
+      return WeatherEnvironmentModule.GetLastInteriorState()
     endif
     return False
   EndFunction
@@ -149,8 +209,8 @@ EndProperty
 
 Int Property LastPreparednessTier Hidden
   Int Function Get()
-    if WeatherModule != None
-      return WeatherModule.GetLastPreparednessTier()
+    if WeatherTierModule != None
+      return WeatherTierModule.GetTier()
     endif
     return -1
   EndFunction
@@ -247,11 +307,26 @@ Int Function GetLastPreparednessTier()
   return LastPreparednessTier
 EndFunction
 
-Function ConfigureWeatherModule(SS_Weather module)
-  WeatherModule = module
-  if WeatherModule != None && bInitialized
-    WeatherModule.ConfigureModule(SS_PlayerAbility)
+Function ConfigureWeatherModule(SS_WeatherEnvironment module)
+  WeatherEnvironmentModule = module
+  if WeatherEnvironmentModule != None
+    cachedEnvWarmth = WeatherEnvironmentModule.GetEnvironmentalWarmth()
+    if bInitialized
+      WeatherEnvironmentModule.ConfigureModule(SS_PlayerAbility)
+    endif
   endif
+  UpdateWeatherTier("ConfigureWeatherModule")
+EndFunction
+
+Function ConfigureWeatherPlayerModule(SS_WeatherPlayer module)
+  WeatherPlayerModule = module
+  if WeatherPlayerModule != None
+    cachedPlayerWarmth = WeatherPlayerModule.GetPlayerWarmth()
+    if bInitialized
+      WeatherPlayerModule.ApplyConfigDefaults()
+    endif
+  endif
+  UpdateWeatherTier("ConfigureWeatherPlayerModule")
 EndFunction
 
 Function ConfigureHungerModule(SS_Hunger module)
@@ -280,8 +355,11 @@ Function ApplyDebugFlags()
   if HungerModule != None
     HungerModule.ApplyDebugFlags()
   endif
-  if WeatherModule != None
-    WeatherModule.ApplyDebugFlags()
+  if WeatherEnvironmentModule != None
+    WeatherEnvironmentModule.ApplyDebugFlags()
+  endif
+  if WeatherPlayerModule != None
+    WeatherPlayerModule.ApplyConfigDefaults()
   endif
 EndFunction
 
@@ -294,8 +372,8 @@ Function RequestRefresh(String source = "RequestRefresh")
     HungerModule.UpdateFromGameTime(False)
   endif
 
-  if WeatherModule != None
-    WeatherModule.RequestFastTick(source)
+  if WeatherEnvironmentModule != None
+    WeatherEnvironmentModule.RequestFastTick(source)
   endif
 EndFunction
 
@@ -308,18 +386,18 @@ Function RequestEnvironmentEvaluate(String source = "EnvironmentChange")
     HungerModule.UpdateFromGameTime(False)
   endif
 
-  if WeatherModule == None
-    InitializeWeatherModule()
+  if WeatherEnvironmentModule == None
+    InitializeWeatherModules()
   endif
 
-  if WeatherModule != None
-    WeatherModule.RequestEvaluate(source, True)
+  if WeatherEnvironmentModule != None
+    WeatherEnvironmentModule.RequestEvaluate(source, True)
   endif
 EndFunction
 
 Function NotifyFastTravelOrigin()
-  if WeatherModule != None
-    WeatherModule.RecordFastTravelOrigin()
+  if WeatherEnvironmentModule != None
+    WeatherEnvironmentModule.RecordFastTravelOrigin()
   endif
 EndFunction
 
@@ -334,3 +412,27 @@ Function NotifySleepComplete(Float hoursSlept)
 
   RequestRefresh("SleepComplete")
 EndFunction
+
+String Function BuildTierSourceLabel(String prefix, String source)
+  if prefix == ""
+    return source
+  endif
+  if source == ""
+    return prefix
+  endif
+  return prefix + "|" + source
+EndFunction
+
+Event OnEnvironmentChanged(Float envWarmth, String source)
+  cachedEnvWarmth = envWarmth
+  String tierSource = BuildTierSourceLabel("EnvChanged", source)
+  if WeatherPlayerModule != None
+    RefreshPlayerWarmthFromModule(tierSource)
+  endif
+  UpdateWeatherTier(tierSource)
+EndEvent
+
+Event OnPlayerWarmthChanged(Float playerWarmth, String source)
+  cachedPlayerWarmth = playerWarmth
+  UpdateWeatherTier(source)
+EndEvent
