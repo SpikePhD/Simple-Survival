@@ -347,18 +347,23 @@ String Function TrimWhitespace(String value)
   return StringUtil.Substring(value, startIndex, endIndex - startIndex + 1)
 EndFunction
 
-Bool Function IsWhitespaceChar(String ch)
-  if ch == " "
-    return True
-  elseif ch == "\t"
-    return True
-  elseif ch == "\r"
-    return True
-  elseif ch == "\n"
-    return True
-  endif
-  return False
-EndFunction
+  Bool Function IsWhitespaceChar(String ch)
+    if ch == " "
+      return True
+    elseif ch == ""
+      return False
+    endif
+
+    Int code = StringUtil.GetNthCharCode(ch, 0)
+    if code == 9
+      return True
+    elseif code == 10
+      return True
+    elseif code == 13
+      return True
+    endif
+    return False
+  EndFunction
 
 Bool Function SourceIncludes(String sources, String token)
   if sources == "" || token == ""

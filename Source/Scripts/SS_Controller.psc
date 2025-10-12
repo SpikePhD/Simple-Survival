@@ -10,7 +10,6 @@ SS_WeatherEnvironment WeatherEnvironmentModule
 SS_WeatherPlayer WeatherPlayerModule
 SS_WeatherTiers WeatherTierModule
 SS_Hunger HungerModule
-Bool bInitialized = False
 
 Bool Property DebugEnabled Hidden
   Bool Function Get()
@@ -35,7 +34,6 @@ Event OnInit()
     WeatherPlayerModule.ApplyConfigDefaults()
   endif
   InitializeHungerModule()
-  bInitialized = True
 EndEvent
 
 Event OnPlayerLoadGame()
@@ -251,21 +249,6 @@ Float Function GetLastWeatherBonus()
   return LastWeatherBonus
 EndFunction
 
-Function InitializeHungerModule()
-  if HungerQuest == None
-    HungerModule = None
-    return
-  endif
-
-  if HungerModule == None
-    HungerModule = HungerQuest as SS_Hunger
-  endif
-
-  if HungerModule != None
-    HungerModule.InitializeModule()
-  endif
-EndFunction
-
 Int Function GetLastRegionClass()
   return LastRegionClass
 EndFunction
@@ -379,3 +362,5 @@ Function NotifySleepComplete(Float hoursSlept)
 
   RequestRefresh("SleepComplete")
 EndFunction
+
+EndScript
