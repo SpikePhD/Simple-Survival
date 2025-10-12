@@ -845,6 +845,7 @@ String Function NormalizeWarmthName(String value)
     return ""
   endif
 
+  String lower = trimmed.ToLower()
   String lower = StringUtil.ToLower(trimmed)
   Int totalLength = StringUtil.GetLength(lower)
   if totalLength <= 0
@@ -1043,23 +1044,26 @@ Float Function ComputePieceWarmth(Actor wearer, Int slotMask, Float baseWarmth, 
 EndFunction
 
 Float Function GetNameBonusForItem(Form akItem)
-    if akItem == None
-        return 0.0
-    endif
+  if akItem == None
+    return 0.0
+  endif
 
-    EnsureNameBonusCache(False)
-    if !gearNameCacheValid || gearNameCacheCount <= 0
-        return 0.0
-    endif
-
+  EnsureNameBonusCache(False)
+  if !gearNameCacheValid || gearNameCacheCount <= 0
+    return 0.0
+  endif
     String n = TrimWhitespace(akItem.GetName())
     if n == ""
         return 0.0
     endif
 
-    ; case-insensitive substring match (adjust later if you add token/boundary mode)
-    String nameLower = NormalizeWarmthName(n)
+  String n = TrimWhitespace(akItem.GetName())
+  if n == ""
+    return 0.0
+  endif
 
+  ; case-insensitive substring match (adjust later if you add token/boundary mode)
+  String nameLower = NormalizeWarmthName(n)
     Float acc = 0.0
     Int i = 0
     while i < gearNameCacheCount
@@ -1076,13 +1080,27 @@ Float Function GetNameBonusForItem(Form akItem)
         i += 1
     endWhile
 
-    ; optional per-piece cap
-    if acc < 0.0
-        acc = 0.0
-    elseif acc > 60.0
-        acc = 60.0
+  Float acc = 0.0
+  Int i = 0
+  while i < gearNameCacheCount
+    String pat = gearNameMatchCache[i]
+    String trimmedPat = TrimWhitespace(pat)
+    if trimmedPat != ""
+      String patLower = NormalizeWarmthName(trimmedPat)
+      if StringUtil.Find(nameLower, patLower) != -1
+        acc += gearNameBonusCache[i]
+      endif
     endif
-    return acc
+    i += 1
+  endWhile
+
+  ; optional per-piece cap
+  if acc < 0.0
+    acc = 0.0
+  elseif acc > 60.0
+    acc = 60.0
+  endif
+  return acc
 EndFunction
 
 Float Function GetLegacyWarmthBonus(String lowerName)
