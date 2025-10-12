@@ -782,6 +782,10 @@ Function DispatchToast(String label, String detail, String category)
 EndFunction
 
 String Function TrimWhitespace(String value)
+  if value == None
+    return ""
+  endif
+
   Int totalLength = StringUtil.GetLength(value)
   if totalLength <= 0
     return ""
@@ -840,30 +844,40 @@ Bool Function IsWhitespaceChar(String charValue)
 EndFunction
 
 String Function NormalizeWarmthName(String value)
+  if value == None
+    return ""
+  endif
+
   String trimmed = TrimWhitespace(value)
   if trimmed == ""
     return ""
   endif
 
-  String lower = trimmed.ToLower()
-  String lower = StringUtil.ToLower(trimmed)
-  Int totalLength = StringUtil.GetLength(lower)
+  Int totalLength = StringUtil.GetLength(trimmed)
   if totalLength <= 0
     return ""
   endif
 
+  String uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  String lowercase = "abcdefghijklmnopqrstuvwxyz"
   String normalized = ""
   Bool lastWasSpace = False
   Int idx = 0
   while idx < totalLength
-    String ch = StringUtil.GetNthChar(lower, idx)
-    if IsWhitespaceChar(ch)
+    String ch = StringUtil.GetNthChar(trimmed, idx)
+    Int upperIndex = StringUtil.Find(uppercase, ch)
+    String lowered = ch
+    if upperIndex >= 0
+      lowered = StringUtil.GetNthChar(lowercase, upperIndex)
+    endif
+
+    if IsWhitespaceChar(lowered)
       if !lastWasSpace
         normalized += " "
         lastWasSpace = True
       endif
     else
-      normalized += ch
+      normalized += lowered
       lastWasSpace = False
     endif
     idx += 1
@@ -1052,10 +1066,6 @@ Float Function GetNameBonusForItem(Form akItem)
   if !gearNameCacheValid || gearNameCacheCount <= 0
     return 0.0
   endif
-    String n = TrimWhitespace(akItem.GetName())
-    if n == ""
-        return 0.0
-    endif
 
   String n = TrimWhitespace(akItem.GetName())
   if n == ""
@@ -1064,30 +1074,17 @@ Float Function GetNameBonusForItem(Form akItem)
 
   ; case-insensitive substring match (adjust later if you add token/boundary mode)
   String nameLower = NormalizeWarmthName(n)
-    Float acc = 0.0
-    Int i = 0
-    while i < gearNameCacheCount
-        String pat = gearNameMatchCache[i]
-        if pat != None
-            String trimmedPat = TrimWhitespace(pat)
-            if trimmedPat != ""
-                String patLower = NormalizeWarmthName(trimmedPat)
-                if StringUtil.Find(nameLower, patLower) != -1
-                    acc += gearNameBonusCache[i]
-                endif
-            endif
-        endif
-        i += 1
-    endWhile
-
   Float acc = 0.0
   Int i = 0
   while i < gearNameCacheCount
     String pat = gearNameMatchCache[i]
+    if pat == None
+      pat = ""
+    endif
     String trimmedPat = TrimWhitespace(pat)
     if trimmedPat != ""
       String patLower = NormalizeWarmthName(trimmedPat)
-      if StringUtil.Find(nameLower, patLower) != -1
+      if patLower != "" && StringUtil.Find(nameLower, patLower) != -1
         acc += gearNameBonusCache[i]
       endif
     endif
