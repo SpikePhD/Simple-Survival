@@ -1078,14 +1078,13 @@ Float Function GetNameBonusForItem(Form akItem)
   Int i = 0
   while i < gearNameCacheCount
     String pat = gearNameMatchCache[i]
-    if pat == None
-      pat = ""
-    endif
-    String trimmedPat = TrimWhitespace(pat)
-    if trimmedPat != ""
-      String patLower = NormalizeWarmthName(trimmedPat)
-      if patLower != "" && StringUtil.Find(nameLower, patLower) != -1
-        acc += gearNameBonusCache[i]
+    if pat != None
+      String trimmedPat = TrimWhitespace(pat)
+      if trimmedPat != ""
+        String patLower = NormalizeWarmthName(trimmedPat)
+        if patLower != "" && StringUtil.Find(nameLower, patLower) != -1
+          acc += gearNameBonusCache[i]
+        endif
       endif
     endif
     i += 1
