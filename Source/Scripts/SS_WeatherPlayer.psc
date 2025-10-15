@@ -3,6 +3,10 @@ Scriptname SS_WeatherPlayer extends Quest
 Bool   Property DebugLog = False Auto
 String Property ConfigPath = "Data/SKSE/Plugins/SS_WeatherConfig.json" Auto
 
+; ---------- Build/Version Tag + Debug ----------
+bool   property SS_DEBUG    auto
+string property SS_BUILD_TAG auto
+
 Function Log(String s)
 	if DebugLog
 		Debug.Trace("[SS_WeatherPlayer] " + s)
@@ -224,7 +228,12 @@ Float Function GetKeywordBonuses(Armor a)
 EndFunction
 
 Event OnInit()
-	RegisterForModEvent("SS_Tick", "OnSSTick")
+	RegisterForModEvent("SS_Tick3", "OnTick3")
+	RegisterForModEvent("SS_Tick4", "OnTick4")
+	if SS_BUILD_TAG == ""
+		SS_BUILD_TAG = "Player 2025-10-15.b"
+	endif
+	Debug.Trace("[SS_WeatherPlayer] OnInit build=" + SS_BUILD_TAG)
 	if DebugLog
 		Log("OnInit")
 	endif
@@ -236,8 +245,20 @@ Event OnPlayerLoadGame()
 	endif
 EndEvent
 
-Event OnSSTick(String eventName, String reason, Float numArg, Form sender)
-	Debug.Trace("[SS_WeatherPlayer] OnSSTick reason=" + reason)
+; 3-arg tick: (string, float, form)
+Event OnTick3(String eventName, String reason, Float numArg, Form sender)
+	HandleTick(numArg, sender)
+EndEvent
+
+; 4-arg tick: (string, string, float, form)
+Event OnTick4(String eventName, Float numArg, Form sender)
+	HandleTick(numArg, sender)
+EndEvent
+
+Function HandleTick(Float numArg, Form sender)
+	if SS_DEBUG
+		Debug.Trace("[SS_WeatherPlayer] HandleTick numArg=" + numArg + " sender=" + sender)
+	endif
 	Actor p = Game.GetPlayer()
 	if !p
 		Log("No player")
@@ -252,12 +273,16 @@ Event OnSSTick(String eventName, String reason, Float numArg, Form sender)
 		warmth += GetKeywordBonuses(worn[k])
 		k = k + 1
 	endwhile
-Int h = ModEvent.Create("SS_WeatherPlayerResult")
-if h
-    String info = "id=" + snapshotId + ";reason=" + reason + ";warmth=" + warmth
-    ModEvent.PushString(h, info)                    ; strArg
-    ModEvent.PushFloat(h, warmth)                   ; numArg
-    ModEvent.PushForm(h, Game.GetPlayer() as Form)  ; sender
-    ModEvent.Send(h)
-endif
-EndEvent
+
+	; ==== Emit on split channels: 4-arg + 3-arg fallback ====
+	string sid = "" + snapshotId
+	int h = ModEvent.Create("SS_WeatherPlayerResult4")
+	bool okS  = ModEvent.PushString(h, sid)
+	bool okF  = ModEvent.PushFloat(h, warmth)
+	bool okFm = ModEvent.PushForm(h, Game.GetPlayer() as Form)
+	bool sent4 = ModEvent.Send(h)
+	(Game.GetPlayer() as Form).SendModEvent("SS_WeatherPlayerResult3", "", warmth)
+	if SS_DEBUG
+		Debug.Trace("[SS_WeatherPlayer] Emit " + SS_BUILD_TAG + " id=" + sid + " warmth=" + warmth + " sent4=" + sent4 + " (also sent PlayerResult3 fallback)")
+	endif
+EndFunction

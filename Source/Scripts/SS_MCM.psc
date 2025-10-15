@@ -7,6 +7,20 @@ Scriptname SS_MCM extends SKI_ConfigBase
 Int Property MAX_ROWS = 64 Auto
 String Property ConfigPath = "Data/SKSE/Plugins/SS_WeatherConfig.json" Auto
 
+; ---------- MCM identity required by SkyUI ----------
+String Function GetName()
+    return "Simple Survival (Weather)"
+EndFunction
+
+Int Function GetVersion()
+    ; bump to force SkyUI to notice updates if cached
+    return 10002
+EndFunction
+
+; ---------- Build/Version Tag + Debug ----------
+bool   property SS_DEBUG    auto
+string property SS_BUILD_TAG auto
+
 String _pageOverview = "Overview"
 String _pageWeather  = "Weather"
 
@@ -82,24 +96,86 @@ Event OnConfigInit()
 
     RegisterForModEvent("SS_WeatherTier",       "OnTierPct")
     RegisterForModEvent("SS_WeatherTierLevel",  "OnTierLevel")
+    ; legacy names
     RegisterForModEvent("SS_WeatherEnvResult",  "OnEnvResult")
     RegisterForModEvent("SS_WeatherPlayerResult","OnPlayerResult")
+    ; split result channels
+    RegisterForModEvent("SS_WeatherEnvResult3",   "OnEnvResult3")
+    RegisterForModEvent("SS_WeatherEnvResult4",   "OnEnvResult4")
+    RegisterForModEvent("SS_WeatherPlayerResult3","OnPlayerResult3")
+    RegisterForModEvent("SS_WeatherPlayerResult4","OnPlayerResult4")
 EndEvent
 
-Event OnTierPct(String evn, String s, Float f, Form sender)
+Event OnGameReload()
+    ; re-register to be safe
+    RegisterForModEvent("SS_WeatherTier",       "OnTierPct")
+    RegisterForModEvent("SS_WeatherTierLevel",  "OnTierLevel")
+    ; legacy names
+    RegisterForModEvent("SS_WeatherEnvResult",  "OnEnvResult")
+    RegisterForModEvent("SS_WeatherPlayerResult","OnPlayerResult")
+    ; split result channels
+    RegisterForModEvent("SS_WeatherEnvResult3",   "OnEnvResult3")
+    RegisterForModEvent("SS_WeatherEnvResult4",   "OnEnvResult4")
+    RegisterForModEvent("SS_WeatherPlayerResult3","OnPlayerResult3")
+    RegisterForModEvent("SS_WeatherPlayerResult4","OnPlayerResult4")
+    if SS_BUILD_TAG == ""
+        SS_BUILD_TAG = "MCM 2025-10-15.c"
+    endif
+    Debug.Trace("[SS_MCM] OnGameReload build=" + SS_BUILD_TAG)
+EndEvent
+
+Event OnTierPct(String evn, Float f, Form sender)
     _lastPct = f
+    if SS_DEBUG
+        Debug.Trace("[SS_MCM] TierPct evn=" + evn + " f=" + f + " sender=" + sender)
+    endif
 EndEvent
 
-Event OnTierLevel(String evn, String s, Float f, Form sender)
+Event OnTierLevel(String evn, Float f, Form sender)
     _lastTier = f as Int
+    if SS_DEBUG
+        Debug.Trace("[SS_MCM] TierLevel evn=" + evn + " f=" + f + " sender=" + sender)
+    endif
 EndEvent
 
-Event OnEnvResult(String evn, String s, Float f, Form sender)
+; legacy 3-arg with string second param (kept for compatibility)
+Event OnEnvResult(String evn, String s, Float f)
     _lastEnv = f
+    if SS_DEBUG
+        Debug.Trace("[SS_MCM] EnvResult(legacy) evn=" + evn + " s=" + s + " f=" + f)
+    endif
 EndEvent
 
-Event OnPlayerResult(String evn, String s, Float f, Form sender)
+; new split handlers
+Event OnEnvResult3(String evn, Float f, Form sender)
+    _lastEnv = f
+    if SS_DEBUG
+        Debug.Trace("[SS_MCM] EnvResult3 evn=" + evn + " f=" + f + " sender=" + sender)
+    endif
+EndEvent
+
+Event OnEnvResult4(String evn, String s, Float f, Form sender)
+    OnEnvResult3(evn, f, sender)
+EndEvent
+
+; legacy 3-arg with string second param (kept for compatibility)
+Event OnPlayerResult(String evn, String s, Float f)
     _lastWarmth = f
+    if SS_DEBUG
+        Debug.Trace("[SS_MCM] PlayerResult(legacy) evn=" + evn + " s=" + s + " f=" + f)
+    endif
+EndEvent
+
+; new split handlers
+Event OnPlayerResult3(String evn, Float f, Form sender)
+    _lastWarmth = f
+    if SS_DEBUG
+        Debug.Trace("[SS_MCM] PlayerResult3 evn=" + evn + " f=" + f + " sender=" + sender)
+    endif
+EndEvent
+
+Event OnPlayerResult4(String evn, String s, Float f, Form sender)
+    OnPlayerResult3(evn, f, sender)
 EndEvent
 
 Event OnPageReset(String a_page)

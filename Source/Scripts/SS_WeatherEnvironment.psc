@@ -1,8 +1,14 @@
 Scriptname SS_WeatherEnvironment extends Quest
 
-Bool   Property DebugLog = False Auto
-String Property ConfigPath = "Data/SKSE/Plugins/SS_WeatherConfig.json" Auto
+; ====== Debug / Config ======
+bool   property SS_DEBUG    auto ; set TRUE in CK to spam logs
+Bool   Property DebugLog     = False Auto
+String Property ConfigPath   = "Data/SKSE/Plugins/SS_WeatherConfig.json" Auto
 
+; ---------- Build/Version Tag ----------
+string property SS_BUILD_TAG auto
+
+; ====== Utilities ======
 Function Log(String s)
 	if DebugLog
 		Debug.Trace("[SS_WeatherEnvironment] " + s)
@@ -49,15 +55,28 @@ EndFunction
 
 Event OnInit()
 	Log("OnInit")
-	RegisterForModEvent("SS_Tick", "OnSSTick")
+	RegisterForModEvent("SS_Tick3", "OnTick3")
+	RegisterForModEvent("SS_Tick4", "OnTick4")
+	if SS_BUILD_TAG == ""
+		SS_BUILD_TAG = "Env 2025-10-15.b"
+	endif
+	Debug.Trace("[SS_WeatherEnvironment] OnInit build=" + SS_BUILD_TAG)
 EndEvent
 
-Event OnPlayerLoadGame()
-	Log("OnPlayerLoadGame")
+; Handle 3-arg tick (string, float, form)
+Event OnTick3(String eventName, String reason, Float numArg, Form sender)
+	HandleTick(numArg, sender)
 EndEvent
 
-Event OnSSTick(String eventName, String reason, Float numArg, Form sender)
-	Debug.Trace("[SS_WeatherEnvironment] OnSSTick reason=" + reason)
+; Handle 4-arg tick (string, string, float, form)
+Event OnTick4(String eventName, Float numArg, Form sender)
+	HandleTick(numArg, sender)
+EndEvent
+
+Function HandleTick(Float numArg, Form sender)
+	if SS_DEBUG
+		Debug.Trace("[SS_WeatherEnvironment] OnSSTick numArg=" + numArg + " sender=" + sender)
+	endif
 	Actor p = Game.GetPlayer()
 	if !p
 		Log("No player")
@@ -102,16 +121,26 @@ Event OnSSTick(String eventName, String reason, Float numArg, Form sender)
 		finalDifficulty = baseDifficulty * nightMul
 	endif
 
-	; ==== FIXED: emit (string, float, form) in that order ====
-	Int h = ModEvent.Create("SS_WeatherEnvResult")
-	if h
-		String info = "id=" + snapshotId + ";reason=" + reason + ";reg=" + classRegional + ";act=" + classActual + ";interior=" + isInterior
-		ModEvent.PushString(h, info)                    ; strArg
-		ModEvent.PushFloat(h, finalDifficulty)          ; numArg
-		ModEvent.PushForm(h, Game.GetPlayer() as Form)  ; sender
-		ModEvent.Send(h)
-		if DebugLog
-			Log("Emit SS_WeatherEnvResult id=" + snapshotId + " diff=" + finalDifficulty)
-		endif
+	; ==== Emit results on split channels ====
+	string sid = "" + snapshotId
+	float difficulty = finalDifficulty
+
+	; 4-arg channel (when supported)
+	int h = ModEvent.Create("SS_WeatherEnvResult4")
+	bool okS  = ModEvent.PushString(h, sid)
+	bool okF  = ModEvent.PushFloat(h, difficulty)
+	bool okFm = ModEvent.PushForm(h, Self as Form)
+	bool sent4 = ModEvent.Send(h)
+
+	; 3-arg fallback for runtimes like yours
+	(Self as Form).SendModEvent("SS_WeatherEnvResult3", "", difficulty)
+
+	if SS_DEBUG
+		Debug.Trace("[SS_WeatherEnvironment] Emit " + SS_BUILD_TAG + " id=" + sid + " diff=" + difficulty + " sent4=" + sent4 + " (also sent EnvResult3 fallback)")
 	endif
+EndFunction
+
+Event OnPlayerLoadGame()
+	Log("OnPlayerLoadGame")
 EndEvent
+

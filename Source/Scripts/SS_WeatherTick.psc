@@ -1,5 +1,9 @@
 Scriptname SS_WeatherTick extends ReferenceAlias
 
+; ========= Debug / Build =========
+bool   property SS_DEBUG    auto
+string property SS_BUILD_TAG auto
+
 ; ========= Config =========
 Bool  Property DebugLog = False Auto
 
@@ -27,13 +31,31 @@ Function FireTick(string reason, float numArg = 0.0, Form sender = None)
 
     _nextId += 1
     float snapshot = _nextId as Float
-    (sender as Form).SendModEvent("SS_Tick", reason, snapshot)
+
+    ; Use ModEvent so we can push a sender Form and keep 4-arg handlers happy
+    int h = ModEvent.Create("SS_Tick4")
+    bool okS  = ModEvent.PushString(h, reason)
+    bool okF  = ModEvent.PushFloat(h, snapshot)
+    bool okFm = ModEvent.PushForm(h, sender)
+    bool sent = ModEvent.Send(h)
+
+    ; Always also send 3-arg fallback for runtimes that ignore PushForm
+    (sender as Form).SendModEvent("SS_Tick3", reason, snapshot)
+
+    if SS_DEBUG
+        Debug.Trace("[SS_WeatherTick] Emit " + SS_BUILD_TAG + " id=" + _nextId + " reason=" + reason + " pushedS=" + okS + " pushedF=" + okF + " pushedForm=" + okFm + " sent=" + sent + " (also sent SS_Tick3 fallback)")
+    endif
 
     Log("Tick -> " + reason + " (id=" + _nextId + ")")
 EndFunction
 
 ; ========= Lifecycle =========
 Event OnInit()
+    if SS_BUILD_TAG == ""
+        SS_BUILD_TAG = "Tick 2025-10-15.b"
+    endif
+    Debug.Trace("[SS_WeatherTick] OnInit build=" + SS_BUILD_TAG)
+
     Log("OnInit")
     InitSnapshots()
 
@@ -42,9 +64,9 @@ Event OnInit()
     RegisterForMenu("ConfigManagerMenu")
     RegisterForMenu("Mod Configuration Menu")
 
-    PO3_Events_Alias.RegisterForWeatherChange(self)            ; Event OnWeatherChange(...)
-    PO3_Events_Alias.RegisterForOnPlayerFastTravelEnd(self)    ; Event OnPlayerFastTravelEnd(...)
-    PO3_Events_Alias.RegisterForCellFullyLoaded(self)          ; Event OnCellFullyLoaded(...)
+    PO3_Events_Alias.RegisterForWeatherChange(self)
+    PO3_Events_Alias.RegisterForOnPlayerFastTravelEnd(self)
+    PO3_Events_Alias.RegisterForCellFullyLoaded(self)
 EndEvent
 
 Event OnPlayerLoadGame()
@@ -59,13 +81,17 @@ Function InitSnapshots()
     endif
     _lastActualWeather = Weather.GetCurrentWeather()
     _lastLocation      = p.GetCurrentLocation()
-    _lastIsInterior    = p.GetParentCell().IsInterior()
+    Cell pc = p.GetParentCell()
+    if pc
+        _lastIsInterior    = pc.IsInterior()
+    else
+        _lastIsInterior    = False
+    endif
 EndFunction
 
 ; ========= PO3 Events =========
 Event OnWeatherChange(Weather akOldWeather, Weather akNewWeather)
     _lastActualWeather = akNewWeather
-    ; Keep sender consistent as the alias/player form
     FireTick("ActualWeatherChanged")
 EndEvent
 
@@ -78,7 +104,7 @@ Event OnCellFullyLoaded(Cell akCell)
     if !p
         return
     endif
-    Bool nowInterior = p.GetParentCell().IsInterior()
+    Bool nowInterior = p.GetParentCell() && p.GetParentCell().IsInterior()
     if nowInterior != _lastIsInterior
         _lastIsInterior = nowInterior
         if nowInterior
@@ -100,7 +126,7 @@ Event OnCellLoad()
     if !p
         return
     endif
-    Bool nowInterior = p.GetParentCell().IsInterior()
+    Bool nowInterior = p.GetParentCell() && p.GetParentCell().IsInterior()
     if nowInterior != _lastIsInterior
         _lastIsInterior = nowInterior
         if nowInterior
