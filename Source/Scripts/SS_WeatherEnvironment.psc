@@ -10,8 +10,8 @@ Function Log(String s)
 EndFunction
 
 Float Function ReadCfgFloat(String sectionPath, Float fallback)
-	Float v = JsonUtil.GetFloatValue(ConfigPath, sectionPath, fallback)
-	return v
+	; JsonUtil returns fallback when key is missing; avoid None/NaN comparisons (Papyrus floats cannot be None)
+	return JsonUtil.GetFloatValue(ConfigPath, sectionPath, fallback)
 EndFunction
 
 Int Function ClampClass(Int c)
@@ -42,44 +42,29 @@ Bool Function IsNightNow(Float startHour, Float endHour)
 	endif
 EndFunction
 
-; Determine a single "regional classification" (0..3) by probing
-; which classifications have a valid regional weather template.
-; Prefers more severe: 3(Snow) > 2(Rain) > 1(Cloudy) > 0(Pleasant).
 Int Function GetRegionalClassification()
-	Weather w3 = Weather.FindWeather(3)
-	if w3
-		return 3
-	endif
-	Weather w2 = Weather.FindWeather(2)
-	if w2
-		return 2
-	endif
-	Weather w1 = Weather.FindWeather(1)
-	if w1
-		return 1
-	endif
+	; Placeholder logic — Weather.FindWeather(int) is invalid, needs proper detection later
 	return 0
 EndFunction
 
 Event OnInit()
 	Log("OnInit")
-	RegisterForModEvent("SS_WeatherTick", "OnSSTick")
+	RegisterForModEvent("SS_Tick", "OnSSTick")
 EndEvent
 
 Event OnPlayerLoadGame()
 	Log("OnPlayerLoadGame")
 EndEvent
 
-Event OnSSTick(String eventName, String reason, Float numArg, Form sender)
+Event OnSSTick(String eventName, String reason, Float numArg)
+	Debug.Trace("[SS_WeatherEnvironment] OnSSTick reason=" + reason)
 	Actor p = Game.GetPlayer()
 	if !p
 		Log("No player")
 		return
 	endif
 
-	; NEW: read snapshot id from the tick
 	Int snapshotId = numArg as Int
-
 	Int classRegional = GetRegionalClassification()
 
 	Weather actualW = Weather.GetCurrentWeather()
@@ -118,7 +103,6 @@ Event OnSSTick(String eventName, String reason, Float numArg, Form sender)
 		finalDifficulty = baseDifficulty * nightMul
 	endif
 
-	; NEW: include snapshotId as first float, then the score
 	Int h = ModEvent.Create("SS_WeatherEnvResult")
 	if h
 		ModEvent.PushFloat(h, snapshotId as Float)

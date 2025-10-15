@@ -7,7 +7,6 @@ Bool  Property DebugLog = False Auto
 Bool     _lastIsInterior
 Location _lastLocation
 Weather  _lastActualWeather
-Int      _nextSnapshot = 1
 
 ; ========= Utilities =========
 Function Log(string s)
@@ -16,17 +15,27 @@ Function Log(string s)
     endif
 EndFunction
 
-Function FireTick(string reason)
-    Int snapshotId = _nextSnapshot
-    _nextSnapshot = _nextSnapshot + 1
+Int _nextId = 0
 
-    int h = ModEvent.Create("SS_WeatherTick")
+Function FireTick(string reason, float numArg = 0.0, Form sender = None)
+    if sender == None
+        sender = GetReference() as Form
+        if sender == None
+            sender = Game.GetPlayer() as Form
+        endif
+    endif
+
+    _nextId += 1
+    float snapshot = _nextId as Float
+
+    ; Listeners expect: OnSSTick(string eventName, string reason, float numArg, Form sender)
+    int h = ModEvent.Create("SS_Tick")
     if h
-        ; strArg = reason, numArg = snapshotId
         ModEvent.PushString(h, reason)
-        ModEvent.PushFloat(h, snapshotId as Float)
+        ModEvent.PushFloat(h, snapshot)
+        ModEvent.PushForm(h, sender)
         ModEvent.Send(h)
-        Log("Tick -> " + reason + " (id=" + snapshotId + ")")
+        Log("Tick -> " + reason + " (id=" + _nextId + ")")
     endif
 EndFunction
 
@@ -40,18 +49,14 @@ Event OnInit()
     RegisterForMenu("ConfigManagerMenu")
     RegisterForMenu("Mod Configuration Menu")
 
-    PO3_Events_Alias.RegisterForWeatherChange(self)
-    PO3_Events_Alias.RegisterForOnPlayerFastTravelEnd(self)
-    PO3_Events_Alias.RegisterForCellFullyLoaded(self)
-
-    ; Kick an initial evaluation so the HUD/toasts don’t wait for first change
-    FireTick("Init")
+    PO3_Events_Alias.RegisterForWeatherChange(self)            ; Event OnWeatherChange(...)
+    PO3_Events_Alias.RegisterForOnPlayerFastTravelEnd(self)    ; Event OnPlayerFastTravelEnd(...)
+    PO3_Events_Alias.RegisterForCellFullyLoaded(self)          ; Event OnCellFullyLoaded(...)
 EndEvent
 
 Event OnPlayerLoadGame()
     Log("OnPlayerLoadGame")
     InitSnapshots()
-    FireTick("LoadGame")
 EndEvent
 
 Function InitSnapshots()
@@ -61,22 +66,18 @@ Function InitSnapshots()
     endif
     _lastActualWeather = Weather.GetCurrentWeather()
     _lastLocation      = p.GetCurrentLocation()
-    Bool isInt = False
-    Cell pc = p.GetParentCell()
-    if pc
-        isInt = pc.IsInterior()
-    endif
-    _lastIsInterior    = isInt
+    _lastIsInterior    = p.GetParentCell().IsInterior()
 EndFunction
 
 ; ========= PO3 Events =========
 Event OnWeatherChange(Weather akOldWeather, Weather akNewWeather)
     _lastActualWeather = akNewWeather
+    ; Keep sender consistent as the alias/player form
     FireTick("ActualWeatherChanged")
 EndEvent
 
 Event OnPlayerFastTravelEnd(float afTravelGameTimeHours)
-    FireTick("FastTravelEnd")
+    FireTick("FastTravelEnd", afTravelGameTimeHours)
 EndEvent
 
 Event OnCellFullyLoaded(Cell akCell)
