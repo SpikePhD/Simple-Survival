@@ -27,16 +27,9 @@ Function FireTick(string reason, float numArg = 0.0, Form sender = None)
 
     _nextId += 1
     float snapshot = _nextId as Float
+    (sender as Form).SendModEvent("SS_Tick", reason, snapshot)
 
-    ; Listeners expect: OnSSTick(string eventName, string reason, float numArg, Form sender)
-    int h = ModEvent.Create("SS_Tick")
-    if h
-        ModEvent.PushString(h, reason)
-        ModEvent.PushFloat(h, snapshot)
-        ModEvent.PushForm(h, sender)
-        ModEvent.Send(h)
-        Log("Tick -> " + reason + " (id=" + _nextId + ")")
-    endif
+    Log("Tick -> " + reason + " (id=" + _nextId + ")")
 EndFunction
 
 ; ========= Lifecycle =========

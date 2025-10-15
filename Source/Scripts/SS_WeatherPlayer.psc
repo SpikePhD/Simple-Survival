@@ -236,7 +236,7 @@ Event OnPlayerLoadGame()
 	endif
 EndEvent
 
-Event OnSSTick(String eventName, String reason, Float numArg)
+Event OnSSTick(String eventName, String reason, Float numArg, Form sender)
 	Debug.Trace("[SS_WeatherPlayer] OnSSTick reason=" + reason)
 	Actor p = Game.GetPlayer()
 	if !p
@@ -252,14 +252,12 @@ Event OnSSTick(String eventName, String reason, Float numArg)
 		warmth += GetKeywordBonuses(worn[k])
 		k = k + 1
 	endwhile
-	Int h = ModEvent.Create("SS_WeatherPlayerResult")
-	if h
-		ModEvent.PushFloat(h, snapshotId as Float)
-		ModEvent.PushFloat(h, warmth)
-		ModEvent.PushString(h, "id=" + snapshotId + " reason=" + reason + " warmth=" + warmth)
-		ModEvent.Send(h)
-	endif
-	if DebugLog
-		Log("id=" + snapshotId + " reason=" + reason + " warmth=" + warmth)
-	endif
+Int h = ModEvent.Create("SS_WeatherPlayerResult")
+if h
+    String info = "id=" + snapshotId + ";reason=" + reason + ";warmth=" + warmth
+    ModEvent.PushString(h, info)                    ; strArg
+    ModEvent.PushFloat(h, warmth)                   ; numArg
+    ModEvent.PushForm(h, Game.GetPlayer() as Form)  ; sender
+    ModEvent.Send(h)
+endif
 EndEvent

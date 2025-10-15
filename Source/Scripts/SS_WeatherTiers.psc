@@ -113,7 +113,7 @@ Event OnPlayerLoadGame()
 EndEvent
 
 ; ===== Event handlers =====
-Event OnSSTick(String eventName, String reason, Float numArg)
+Event OnSSTick(String eventName, String reason, Float numArg, Form sender)
 	Debug.Trace("[SS_WeatherTiers] OnSSTick reason=" + reason)
 	_currentId = numArg as Int
 	_lastReason = reason

@@ -10,7 +10,7 @@ Function Log(String s)
 EndFunction
 
 Float Function ReadCfgFloat(String sectionPath, Float fallback)
-	; JsonUtil returns fallback when key is missing; avoid None/NaN comparisons (Papyrus floats cannot be None)
+	; JsonUtil returns fallback when key is missing; Papyrus floats cannot be None
 	return JsonUtil.GetFloatValue(ConfigPath, sectionPath, fallback)
 EndFunction
 
@@ -28,22 +28,22 @@ Bool Function IsNightNow(Float startHour, Float endHour)
 	Float day = Utility.GetCurrentGameTime()
 	Float hours = (day - Math.Floor(day)) * 24.0
 	if startHour <= endHour
-		if hours >= startHour && hours < endHour
-			return True
-		else
-			return False
-		endif
+		return (hours >= startHour && hours < endHour)
 	else
-		if hours >= startHour || hours < endHour
-			return True
-		else
-			return False
-		endif
+		return (hours >= startHour || hours < endHour)
 	endif
 EndFunction
 
+; "Regional" ˜ outgoing/target weather during transitions; fall back to current
 Int Function GetRegionalClassification()
-	; Placeholder logic — Weather.FindWeather(int) is invalid, needs proper detection later
+	Weather w = Weather.GetOutgoingWeather()
+	if w
+		return ClampClass(w.GetClassification())
+	endif
+	w = Weather.GetCurrentWeather()
+	if w
+		return ClampClass(w.GetClassification())
+	endif
 	return 0
 EndFunction
 
@@ -56,7 +56,7 @@ Event OnPlayerLoadGame()
 	Log("OnPlayerLoadGame")
 EndEvent
 
-Event OnSSTick(String eventName, String reason, Float numArg)
+Event OnSSTick(String eventName, String reason, Float numArg, Form sender)
 	Debug.Trace("[SS_WeatherEnvironment] OnSSTick reason=" + reason)
 	Actor p = Game.GetPlayer()
 	if !p
@@ -94,7 +94,6 @@ Event OnSSTick(String eventName, String reason, Float numArg)
 	else
 		shelter = wExterior
 	endif
-
 	Float baseDifficulty = regWeight + actWeight + shelter
 
 	Bool isNight = IsNightNow(nightStart, nightEnd)
@@ -103,16 +102,16 @@ Event OnSSTick(String eventName, String reason, Float numArg)
 		finalDifficulty = baseDifficulty * nightMul
 	endif
 
+	; ==== FIXED: emit (string, float, form) in that order ====
 	Int h = ModEvent.Create("SS_WeatherEnvResult")
 	if h
-		ModEvent.PushFloat(h, snapshotId as Float)
-		ModEvent.PushFloat(h, finalDifficulty)
-		ModEvent.PushString(h, "reason=" + reason + "; reg=" + classRegional + "; act=" + classActual + "; interior=" + isInterior)
+		String info = "id=" + snapshotId + ";reason=" + reason + ";reg=" + classRegional + ";act=" + classActual + ";interior=" + isInterior
+		ModEvent.PushString(h, info)                    ; strArg
+		ModEvent.PushFloat(h, finalDifficulty)          ; numArg
+		ModEvent.PushForm(h, Game.GetPlayer() as Form)  ; sender
 		ModEvent.Send(h)
-	endif
-
-	if DebugLog
-		String dbg = "id=" + snapshotId + " reason=" + reason + " regClass=" + classRegional + " actClass=" + classActual + " interior=" + isInterior + " baseDiff=" + baseDifficulty + " night=" + isNight + " mul=" + nightMul + " finalDiff=" + finalDifficulty
-		Log(dbg)
+		if DebugLog
+			Log("Emit SS_WeatherEnvResult id=" + snapshotId + " diff=" + finalDifficulty)
+		endif
 	endif
 EndEvent
