@@ -3,7 +3,7 @@ Scriptname SS_WeatherEnvironment extends Quest
 ; ====== Debug / Config ======
 bool   property SS_DEBUG    auto ; set TRUE in CK to spam logs
 Bool   Property DebugLog     = False Auto
-String Property ConfigPath   = "Data/SKSE/Plugins/SS_WeatherConfig.json" Auto
+String Property ConfigPath   = "SS_WeatherConfig.json" Auto
 
 ; ---------- Build/Version Tag ----------
 string property SS_BUILD_TAG auto
@@ -40,7 +40,7 @@ Bool Function IsNightNow(Float startHour, Float endHour)
 	endif
 EndFunction
 
-; "Regional" ˜ outgoing/target weather during transitions; fall back to current
+; "Regional" - outgoing/target weather during transitions; fall back to current
 Int Function GetRegionalClassification()
 	Weather w = Weather.GetOutgoingWeather()
 	if w
@@ -69,7 +69,7 @@ Event OnTick3(String eventName, String reason, Float numArg, Form sender)
 EndEvent
 
 ; Handle 4-arg tick (string, string, float, form)
-Event OnTick4(String eventName, Float numArg, Form sender)
+Event OnTick4(String eventName, String reason, Float numArg, Form sender)
 	HandleTick(numArg, sender)
 EndEvent
 
@@ -127,20 +127,27 @@ Function HandleTick(Float numArg, Form sender)
 
 	; 4-arg channel (when supported)
 	int h = ModEvent.Create("SS_WeatherEnvResult4")
-	bool okS  = ModEvent.PushString(h, sid)
-	bool okF  = ModEvent.PushFloat(h, difficulty)
-	bool okFm = ModEvent.PushForm(h, Self as Form)
-	bool sent4 = ModEvent.Send(h)
+	bool okS = False
+	bool okF = False
+	bool okFm = False
+	bool sent4 = False
+	if h
+		okS = ModEvent.PushString(h, sid)
+		okF = ModEvent.PushFloat(h, difficulty)
+		okFm = ModEvent.PushForm(h, Self as Form)
+		if okS && okF && okFm
+			sent4 = ModEvent.Send(h)
+		endif
+	endif
 
 	; 3-arg fallback for runtimes like yours
 	(Self as Form).SendModEvent("SS_WeatherEnvResult3", "", difficulty)
 
 	if SS_DEBUG
-		Debug.Trace("[SS_WeatherEnvironment] Emit " + SS_BUILD_TAG + " id=" + sid + " diff=" + difficulty + " sent4=" + sent4 + " (also sent EnvResult3 fallback)")
+		Debug.Trace("[SS_WeatherEnvironment] Emit " + SS_BUILD_TAG + " id=" + sid + " diff=" + difficulty + " okS=" + okS + " okF=" + okF + " okFm=" + okFm + " sent4=" + sent4 + " (also sent EnvResult3 fallback)")
 	endif
 EndFunction
 
 Event OnPlayerLoadGame()
 	Log("OnPlayerLoadGame")
 EndEvent
-

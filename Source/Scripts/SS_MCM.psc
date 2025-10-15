@@ -1,11 +1,11 @@
 Scriptname SS_MCM extends SKI_ConfigBase
 
 ; =============================================================
-; Simple Survival (SS) — MCM (safe version for Papyrus, no Var)
+; Simple Survival (SS) - MCM (safe version for Papyrus, no Var)
 ; =============================================================
 
 Int Property MAX_ROWS = 64 Auto
-String Property ConfigPath = "Data/SKSE/Plugins/SS_WeatherConfig.json" Auto
+String Property ConfigPath = "SS_WeatherConfig.json" Auto
 
 ; ---------- MCM identity required by SkyUI ----------
 String Function GetName()
@@ -90,6 +90,7 @@ String Function F1(Float v)
 EndFunction
 
 Event OnConfigInit()
+    ModName = "Simple Survival (Weather)"
     Pages = new String[2]
     Pages[0] = _pageOverview
     Pages[1] = _pageWeather
@@ -107,6 +108,8 @@ Event OnConfigInit()
 EndEvent
 
 Event OnGameReload()
+    Parent.OnGameReload()
+    ModName = "Simple Survival (Weather)"
     ; re-register to be safe
     RegisterForModEvent("SS_WeatherTier",       "OnTierPct")
     RegisterForModEvent("SS_WeatherTierLevel",  "OnTierLevel")
@@ -124,17 +127,17 @@ Event OnGameReload()
     Debug.Trace("[SS_MCM] OnGameReload build=" + SS_BUILD_TAG)
 EndEvent
 
-Event OnTierPct(String evn, Float f, Form sender)
+Event OnTierPct(String evn, String detail, Float f, Form sender)
     _lastPct = f
     if SS_DEBUG
-        Debug.Trace("[SS_MCM] TierPct evn=" + evn + " f=" + f + " sender=" + sender)
+        Debug.Trace("[SS_MCM] TierPct evn=" + evn + " detail=" + detail + " f=" + f + " sender=" + sender)
     endif
 EndEvent
 
-Event OnTierLevel(String evn, Float f, Form sender)
+Event OnTierLevel(String evn, String detail, Float f, Form sender)
     _lastTier = f as Int
     if SS_DEBUG
-        Debug.Trace("[SS_MCM] TierLevel evn=" + evn + " f=" + f + " sender=" + sender)
+        Debug.Trace("[SS_MCM] TierLevel evn=" + evn + " detail=" + detail + " f=" + f + " sender=" + sender)
     endif
 EndEvent
 
@@ -147,15 +150,15 @@ Event OnEnvResult(String evn, String s, Float f)
 EndEvent
 
 ; new split handlers
-Event OnEnvResult3(String evn, Float f, Form sender)
+Event OnEnvResult3(String evn, String detail, Float f, Form sender)
     _lastEnv = f
     if SS_DEBUG
-        Debug.Trace("[SS_MCM] EnvResult3 evn=" + evn + " f=" + f + " sender=" + sender)
+        Debug.Trace("[SS_MCM] EnvResult3 evn=" + evn + " detail=" + detail + " f=" + f + " sender=" + sender)
     endif
 EndEvent
 
 Event OnEnvResult4(String evn, String s, Float f, Form sender)
-    OnEnvResult3(evn, f, sender)
+    OnEnvResult3(evn, s, f, sender)
 EndEvent
 
 ; legacy 3-arg with string second param (kept for compatibility)
@@ -167,15 +170,15 @@ Event OnPlayerResult(String evn, String s, Float f)
 EndEvent
 
 ; new split handlers
-Event OnPlayerResult3(String evn, Float f, Form sender)
+Event OnPlayerResult3(String evn, String detail, Float f, Form sender)
     _lastWarmth = f
     if SS_DEBUG
-        Debug.Trace("[SS_MCM] PlayerResult3 evn=" + evn + " f=" + f + " sender=" + sender)
+        Debug.Trace("[SS_MCM] PlayerResult3 evn=" + evn + " detail=" + detail + " f=" + f + " sender=" + sender)
     endif
 EndEvent
 
 Event OnPlayerResult4(String evn, String s, Float f, Form sender)
-    OnPlayerResult3(evn, f, sender)
+    OnPlayerResult3(evn, s, f, sender)
 EndEvent
 
 Event OnPageReset(String a_page)
@@ -189,8 +192,8 @@ EndEvent
 Function BuildPageOverview()
     SetCursorFillMode(TOP_TO_BOTTOM)
     AddHeaderOption("Weather")
-    oidWarmth = AddTextOption("Player warmth", F1(_lastWarmth))
-    oidEnv    = AddTextOption("Environmental score", F1(_lastEnv))
+    oidWarmth = AddTextOption("Player warmth", F0(_lastWarmth))
+    oidEnv    = AddTextOption("Environmental score", F0(_lastEnv))
     oidPct    = AddTextOption("Preparedness", (F0(_lastPct) + "%"))
     oidTier   = AddTextOption("Tier", ("" + _lastTier))
 EndFunction
@@ -218,3 +221,6 @@ EndFunction
 String Function GetS(String path, String fallback)
     return JsonUtil.GetStringValue(ConfigPath, path, fallback)
 EndFunction
+
+
+

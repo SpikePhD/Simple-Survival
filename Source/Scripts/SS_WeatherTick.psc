@@ -34,16 +34,24 @@ Function FireTick(string reason, float numArg = 0.0, Form sender = None)
 
     ; Use ModEvent so we can push a sender Form and keep 4-arg handlers happy
     int h = ModEvent.Create("SS_Tick4")
-    bool okS  = ModEvent.PushString(h, reason)
-    bool okF  = ModEvent.PushFloat(h, snapshot)
-    bool okFm = ModEvent.PushForm(h, sender)
-    bool sent = ModEvent.Send(h)
+    bool okS = False
+    bool okF = False
+    bool okFm = False
+    bool sent4 = False
+    if h
+        okS = ModEvent.PushString(h, reason)
+        okF = ModEvent.PushFloat(h, snapshot)
+        okFm = ModEvent.PushForm(h, sender)
+        if okS && okF && okFm
+            sent4 = ModEvent.Send(h)
+        endif
+    endif
 
     ; Always also send 3-arg fallback for runtimes that ignore PushForm
     (sender as Form).SendModEvent("SS_Tick3", reason, snapshot)
 
     if SS_DEBUG
-        Debug.Trace("[SS_WeatherTick] Emit " + SS_BUILD_TAG + " id=" + _nextId + " reason=" + reason + " pushedS=" + okS + " pushedF=" + okF + " pushedForm=" + okFm + " sent=" + sent + " (also sent SS_Tick3 fallback)")
+        Debug.Trace("[SS_WeatherTick] Emit " + SS_BUILD_TAG + " id=" + _nextId + " reason=" + reason + " pushedS=" + okS + " pushedF=" + okF + " pushedForm=" + okFm + " sent4=" + sent4 + " (also sent SS_Tick3 fallback)")
     endif
 
     Log("Tick -> " + reason + " (id=" + _nextId + ")")
@@ -183,3 +191,4 @@ Event OnMenuClose(String menuName)
         FireTick("MCMClose")
     endif
 EndEvent
+

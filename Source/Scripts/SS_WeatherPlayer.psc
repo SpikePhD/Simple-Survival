@@ -1,7 +1,7 @@
 Scriptname SS_WeatherPlayer extends Quest
 
 Bool   Property DebugLog = False Auto
-String Property ConfigPath = "Data/SKSE/Plugins/SS_WeatherConfig.json" Auto
+String Property ConfigPath = "SS_WeatherConfig.json" Auto
 
 ; ---------- Build/Version Tag + Debug ----------
 bool   property SS_DEBUG    auto
@@ -251,7 +251,7 @@ Event OnTick3(String eventName, String reason, Float numArg, Form sender)
 EndEvent
 
 ; 4-arg tick: (string, string, float, form)
-Event OnTick4(String eventName, Float numArg, Form sender)
+Event OnTick4(String eventName, String reason, Float numArg, Form sender)
 	HandleTick(numArg, sender)
 EndEvent
 
@@ -277,12 +277,21 @@ Function HandleTick(Float numArg, Form sender)
 	; ==== Emit on split channels: 4-arg + 3-arg fallback ====
 	string sid = "" + snapshotId
 	int h = ModEvent.Create("SS_WeatherPlayerResult4")
-	bool okS  = ModEvent.PushString(h, sid)
-	bool okF  = ModEvent.PushFloat(h, warmth)
-	bool okFm = ModEvent.PushForm(h, Game.GetPlayer() as Form)
-	bool sent4 = ModEvent.Send(h)
+	bool okS = False
+	bool okF = False
+	bool okFm = False
+	bool sent4 = False
+	if h
+		okS = ModEvent.PushString(h, sid)
+		okF = ModEvent.PushFloat(h, warmth)
+		okFm = ModEvent.PushForm(h, Game.GetPlayer() as Form)
+		if okS && okF && okFm
+			sent4 = ModEvent.Send(h)
+		endif
+	endif
 	(Game.GetPlayer() as Form).SendModEvent("SS_WeatherPlayerResult3", "", warmth)
 	if SS_DEBUG
-		Debug.Trace("[SS_WeatherPlayer] Emit " + SS_BUILD_TAG + " id=" + sid + " warmth=" + warmth + " sent4=" + sent4 + " (also sent PlayerResult3 fallback)")
+		Debug.Trace("[SS_WeatherPlayer] Emit " + SS_BUILD_TAG + " id=" + sid + " warmth=" + warmth + " okS=" + okS + " okF=" + okF + " okFm=" + okFm + " sent4=" + sent4 + " (also sent PlayerResult3 fallback)")
 	endif
 EndFunction
+
