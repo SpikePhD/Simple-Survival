@@ -1,7 +1,7 @@
 Scriptname SS_WeatherPlayer extends Quest
 
 Bool   Property DebugLog = False Auto
-String Property ConfigPath = "SS_WeatherConfig.json" Auto
+String Property ConfigPath = "Data/SKSE/Plugins/SS_WeatherConfig.json" Auto
 
 ; ---------- Build/Version Tag + Debug ----------
 bool   property SS_DEBUG    auto

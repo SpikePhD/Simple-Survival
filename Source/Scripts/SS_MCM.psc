@@ -5,7 +5,7 @@ Scriptname SS_MCM extends SKI_ConfigBase
 ; =============================================================
 
 Int Property MAX_ROWS = 64 Auto
-String Property ConfigPath = "SS_WeatherConfig.json" Auto
+String Property ConfigPath = "Data/SKSE/Plugins/SS_WeatherConfig.json" Auto
 
 ; ---------- MCM identity required by SkyUI ----------
 String Function GetName()
@@ -221,6 +221,11 @@ EndFunction
 String Function GetS(String path, String fallback)
     return JsonUtil.GetStringValue(ConfigPath, path, fallback)
 EndFunction
+
+Event OnUpdate()
+EndEvent
+
+
 
 
 

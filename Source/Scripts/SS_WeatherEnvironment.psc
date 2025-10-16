@@ -3,7 +3,7 @@ Scriptname SS_WeatherEnvironment extends Quest
 ; ====== Debug / Config ======
 bool   property SS_DEBUG    auto ; set TRUE in CK to spam logs
 Bool   Property DebugLog     = False Auto
-String Property ConfigPath   = "SS_WeatherConfig.json" Auto
+String Property ConfigPath   = "Data/SKSE/Plugins/SS_WeatherConfig.json" Auto
 
 ; ---------- Build/Version Tag ----------
 string property SS_BUILD_TAG auto
