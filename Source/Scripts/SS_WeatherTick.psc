@@ -11,6 +11,8 @@ Bool  Property DebugLog = False Auto
 Bool     _lastIsInterior
 Location _lastLocation
 Weather  _lastActualWeather
+Weather  _lastRegionalWeather
+Actor    _aliasActor
 
 ; ========= Utilities =========
 Function Log(string s)
@@ -60,12 +62,22 @@ EndFunction
 ; ========= Lifecycle =========
 Event OnInit()
     if SS_BUILD_TAG == ""
-        SS_BUILD_TAG = "Tick 2025-10-16.c"
+        SS_BUILD_TAG = "Tick 2025-10-17.d"
     endif
     Debug.Trace("[SS_WeatherTick] OnInit build=" + SS_BUILD_TAG)
 
+    ; cache the bound alias actor for easier debugging
+    _aliasActor = GetReference() as Actor
+    if SS_DEBUG
+        Debug.Trace("[SS_WeatherTick] Alias=" + _aliasActor)
+    endif
+
     Log("OnInit")
     InitSnapshots()
+
+    if SS_DEBUG
+        Debug.Trace("[SS_WeatherTick] Initial regional=" + _lastRegionalWeather + " actual=" + _lastActualWeather)
+    endif
 
     RegisterForMenu("WaitingMenu")
     RegisterForMenu("Sleep/Wait Menu")
@@ -92,6 +104,7 @@ Function InitSnapshots()
         return
     endif
     _lastActualWeather = Weather.GetCurrentWeather()
+    _lastRegionalWeather = GetRegionalWeatherSnapshot()
     _lastLocation      = p.GetCurrentLocation()
     Cell pc = p.GetParentCell()
     if pc
@@ -101,17 +114,26 @@ Function InitSnapshots()
     endif
 EndFunction
 
-; ========= PO3 Events =========
-Event OnWeatherChange(Weather akOldWeather, Weather akNewWeather)
-    _lastActualWeather = akNewWeather
-    FireTick("ActualWeatherChanged")
-EndEvent
+Weather Function GetRegionalWeatherSnapshot()
+    Weather w = Weather.GetOutgoingWeather()
+    if !w
+        w = Weather.GetCurrentWeather()
+    endif
+    return w
+EndFunction
 
-Event OnPlayerFastTravelEnd(float afTravelGameTimeHours)
-    FireTick("FastTravelEnd", afTravelGameTimeHours)
-EndEvent
+Function FireRegionalIfChanged(String reason)
+    Weather current = GetRegionalWeatherSnapshot()
+    if current != _lastRegionalWeather
+        _lastRegionalWeather = current
+        if SS_DEBUG
+            Debug.Trace("[SS_WeatherTick] Regional weather changed -> FireTick(" + reason + ")")
+        endif
+        FireTick(reason)
+    endif
+EndFunction
 
-Event OnCellFullyLoaded(Cell akCell)
+Function UpdateInteriorStateAndFire()
     Actor p = GetReference() as Actor
     if !p
         return
@@ -126,42 +148,47 @@ Event OnCellFullyLoaded(Cell akCell)
             FireTick("TransitionToExterior")
         endif
     endif
+    FireRegionalIfChanged("RegionalWeatherChanged")
+EndFunction
+
+; ========= PO3 Events =========
+Event OnWeatherChange(Weather akOldWeather, Weather akNewWeather)
+    _lastActualWeather = akNewWeather
+    FireRegionalIfChanged("RegionalWeatherChanged")
+    FireTick("ActualWeatherChanged")
+EndEvent
+
+Event OnPlayerFastTravelEnd(float afTravelGameTimeHours)
+    FireRegionalIfChanged("RegionalWeatherChanged")
+    FireTick("FastTravelEnd", afTravelGameTimeHours)
+EndEvent
+
+Event OnCellFullyLoaded(Cell akCell)
+    UpdateInteriorStateAndFire()
 EndEvent
 
 ; ========= Vanilla Events (no polling) =========
 Event OnLocationChange(Location akOldLoc, Location akNewLoc)
     _lastLocation = akNewLoc
+    FireRegionalIfChanged("RegionalWeatherChanged")
     FireTick("LocationChanged")
 EndEvent
 
 Event OnCellLoad()
-    Actor p = GetReference() as Actor
-    if !p
-        return
-    endif
-    Cell pc = p.GetParentCell()
-    Bool nowInterior = pc && pc.IsInterior()
-    if nowInterior != _lastIsInterior
-        _lastIsInterior = nowInterior
-        if nowInterior
-            FireTick("TransitionToInterior")
-        else
-            FireTick("TransitionToExterior")
-        endif
-    endif
+    UpdateInteriorStateAndFire()
 EndEvent
 
 ; Equip/Unequip (player-only)
 Event OnObjectEquipped(Form akBaseObject, ObjectReference akRef)
-    if akRef == GetReference()
-        FireTick("Equipped")
-    endif
+    ; Fire immediately (akRef may be None for non-persistent gear, do not gate on equality)
+    FireTick("Equipped")
+    ; Fire a delayed tick to catch post-swap state
+    RegisterForSingleUpdate(0.50)
 EndEvent
 
 Event OnObjectUnequipped(Form akBaseObject, ObjectReference akRef)
-    if akRef == GetReference()
-        FireTick("Unequipped")
-    endif
+    FireTick("Unequipped")
+    RegisterForSingleUpdate(0.50)
 EndEvent
 
 ; Sleep / Wait
@@ -175,6 +202,11 @@ Event OnSleepStop(Bool abInterrupted)
     if GetReference() as Actor
         FireTick("SleepStop")
     endif
+EndEvent
+
+Event OnUpdate()
+    ; delayed follow-up for equip/unequip
+    FireTick("EquipDelayed")
 EndEvent
 
 ; ========= Consolidated menu events =========

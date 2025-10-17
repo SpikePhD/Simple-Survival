@@ -6,7 +6,19 @@ Scriptname SS_MCM extends SKI_ConfigBase
 ; =============================================================
 
 Int Property MAX_ROWS = 64 Auto
-String Property ConfigPath = "Data/SKSE/Plugins/SS_WeatherConfig.json" Auto
+; Legacy single-config path kept for backward compat but unused by routing helpers below
+String Property ConfigPath = "SS/SS_WeatherConfig.json" Auto
+
+; Player warmth constants (mirrors SS_WeatherPlayer)
+Float Property BONUS_HELMET    = 20.0 AutoReadOnly
+Float Property BONUS_ARMOR     = 50.0 AutoReadOnly
+Float Property BONUS_BOOTS     = 25.0 AutoReadOnly
+Float Property BONUS_BRACELETS = 10.0 AutoReadOnly
+Float Property BONUS_CLOAK     = 15.0 AutoReadOnly
+
+; Environment config
+String _envCfg    = "SS/environmentwarmth_config.json"
+Bool   _envOk     = False
 
 ; ---------- MCM identity required by SkyUI ----------
 String Function GetName()
@@ -15,7 +27,7 @@ EndFunction
 
 Int Function GetVersion()
     ; bump to force SkyUI to notice updates if cached
-    return 10005 ; +Refresh button, manual SS_Tick
+    return 10006 ; +Refresh button, manual SS_Tick
 EndFunction
 
 ; ---------- Build/Version Tag + Debug ----------
@@ -33,8 +45,12 @@ String _lastReason = ""
 
 ; track when the overview options actually exist
 Bool _overviewReady = False
+String _currentPage = ""
 
 Int oidHdrWeather
+Int oidMode
+Int oidCurClass
+Int oidRegClass
 Int oidWarmth
 Int oidEnv
 Int oidTier
@@ -68,8 +84,6 @@ Int[] oidMaskLabel
 
 Int oidHdrKW
 Int oidKWLen
-Int[] oidKWEditor
-Int[] oidKWBonus
 
 Int oidSave
 Int oidReload
@@ -99,16 +113,71 @@ EndFunction
 
 ; Safe SetTextOptionValue (only after page is built)
 Function SafeSet(Int oid, String text)
-    if _overviewReady && oid > 0
+    if CanUpdateOverview() && oid > 0
         SetTextOptionValue(oid, text)
     endif
 EndFunction
 
+Bool Function CanUpdateOverview()
+    if !_overviewReady
+        return False
+    endif
+    if _currentPage != _pageOverview
+        return False
+    endif
+    if !Utility.IsInMenuMode()
+        return False
+    endif
+    return True
+EndFunction
+
 Function RefreshOverview()
+    SafeSet(oidMode, "Gear bonuses")
     SafeSet(oidWarmth, F0(_lastWarmth))
     SafeSet(oidEnv,    F0(_lastEnv))
     SafeSet(oidPct,    (F0(_lastPct) + "%"))
     SafeSet(oidTier,   ("" + _lastTier))
+EndFunction
+
+; Show current/regional weather classes
+Function RefreshWeatherClasses()
+    Int cur = 0
+    Int reg = 0
+    Weather wCur = Weather.GetCurrentWeather()
+    if wCur
+        cur = wCur.GetClassification()
+    endif
+    Weather wOut = Weather.GetOutgoingWeather()
+    if wOut
+        reg = wOut.GetClassification()
+    else
+        reg = cur
+    endif
+    if cur < 0
+        cur = 0
+    elseif cur > 3
+        cur = 3
+    endif
+    if reg < 0
+        reg = 0
+    elseif reg > 3
+        reg = 3
+    endif
+    SafeSet(oidCurClass, ClassName(cur))
+    SafeSet(oidRegClass, ClassName(reg))
+EndFunction
+
+String Function ClassName(Int c)
+    if c == 0
+        return "Pleasant"
+    elseif c == 1
+        return "Cloudy"
+    elseif c == 2
+        return "Rainy"
+    elseif c == 3
+        return "Snowy"
+    endif
+    return "Unknown"
 EndFunction
 
 ; Fire a manual SS_Tick to force recomputation by subsystems
@@ -127,6 +196,9 @@ Function FireManualTick(string reason)
         endif
     endif
     (Game.GetPlayer() as Form).SendModEvent("SS_Tick3", reason, snapshot)
+    if SS_DEBUG
+        Debug.Trace("[SS_MCM] FireManualTick reason=" + reason + " snapshot=" + snapshot + " okS=" + okS + " okF=" + okF + " okFm=" + okFm)
+    endif
 EndFunction
 
 ; Ask subsystems to re-emit their latest values (works with v3/v4/legacy)
@@ -230,7 +302,9 @@ Event OnPlayerResult3(String evn, String detail, Float f, Form sender)
     if SS_DEBUG
         Debug.Trace("[SS_MCM] PlayerResult3 evn=" + evn + " detail=" + detail + " f=" + f + " sender=" + sender)
     endif
-    ; no live UI write here; Overview updates only when that page is open
+    if CanUpdateOverview()
+        RefreshOverview()
+    endif
 EndEvent
 
 Event OnPlayerResult4(String evn, String s, Float f, Form sender)
@@ -238,6 +312,7 @@ Event OnPlayerResult4(String evn, String s, Float f, Form sender)
 EndEvent
 
 Event OnPageReset(String a_page)
+    _currentPage = a_page
     _overviewReady = False
     If a_page == _pageOverview
         BuildPageOverview()
@@ -250,8 +325,17 @@ Event OnPageReset(String a_page)
     EndIf
 EndEvent
 
+Event OnConfigClose()
+    _overviewReady = False
+    _currentPage = ""
+EndEvent
+
 Event OnOptionSelect(Int option)
     if option == oidRefresh
+        if SS_DEBUG
+            Debug.Trace("[SS_MCM] Refresh clicked")
+        endif
+        SafeSet(oidRefresh, "...")
         FireManualTick("MCMRefresh")
         RegisterForSingleUpdate(0.25)
     endif
@@ -261,6 +345,9 @@ Function BuildPageOverview()
     SetCursorFillMode(TOP_TO_BOTTOM)
     AddHeaderOption("Weather")
     oidRefresh = AddTextOption("Refresh now", "?")
+    oidMode    = AddTextOption("Computation Mode",   "?")
+    oidCurClass = AddTextOption("Current Weather",  "?")
+    oidRegClass = AddTextOption("Regional Weather", "?")
     oidWarmth = AddTextOption("Player warmth",        F0(_lastWarmth))
     oidEnv    = AddTextOption("Environmental score", F0(_lastEnv))
     oidPct    = AddTextOption("Preparedness",         (F0(_lastPct) + "%"))
@@ -270,98 +357,96 @@ EndFunction
 Function BuildPageWeather()
     SetCursorFillMode(TOP_TO_BOTTOM)
 
-    ; ===== Player Warmth Base Bonuses (slot-based) =====
-    AddHeaderOption("Player Warmth Base Bonuses")
-
-    ; Slots live under player.slots.*.bonus
-    oidKWLen = AddSliderOption("Helmet",  GetF("player.slots.helmet.bonus",    5.0),  "{0}") ; 0..500
-    oidKWEditor = new Int[1] ; dummy to keep compiler happy for reused ids elsewhere
-    oidKWBonus = new Int[1]
-    oidReg0 = AddSliderOption("Armour",  GetF("player.slots.armor.bonus",     12.0), "{0}")
-    oidReg1 = AddSliderOption("Boots",   GetF("player.slots.boots.bonus",     5.0),  "{0}")
-    oidReg2 = AddSliderOption("Arms",    GetF("player.slots.bracelets.bonus", 3.0),  "{0}")
-    oidReg3 = AddSliderOption("Cloak",   GetF("player.slots.cloak.bonus",     6.0),  "{0}")
+    ; ===== Player Warmth Base Bonuses (gear occupancy only) =====
+    AddHeaderOption("Player Warmth Bonuses")
+    oidKWLen = AddTextOption("Helmet",  F0(BONUS_HELMET))
+    oidReg0  = AddTextOption("Armour",  F0(BONUS_ARMOR))
+    oidReg1  = AddTextOption("Boots",   F0(BONUS_BOOTS))
+    oidReg2  = AddTextOption("Arms",    F0(BONUS_BRACELETS))
+    oidReg3  = AddTextOption("Cloak",   F0(BONUS_CLOAK))
 
     ; ===== Environment Warmth =====
     AddHeaderOption("Environment Warmth")
     ; Regional (classification of outgoing/current region)
-    oidAct0 = AddSliderOption("Regional Pleasant", GetF("weights.regional.0", 0.0),  "{0}")
-    oidAct1 = AddSliderOption("Regional Cloudy",   GetF("weights.regional.1", 5.0),  "{0}")
-    oidAct2 = AddSliderOption("Regional Rainy",    GetF("weights.regional.2", 15.0), "{0}")
-    oidAct3 = AddSliderOption("Regional Snowy",    GetF("weights.regional.3", 25.0), "{0}")
+    oidAct0 = AddSliderOption("Regional Pleasant", GetFE("weights.regional.0", 0.0),  "{0}")
+    oidAct1 = AddSliderOption("Regional Cloudy",   GetFE("weights.regional.1", 5.0),  "{0}")
+    oidAct2 = AddSliderOption("Regional Rainy",    GetFE("weights.regional.2", 15.0), "{0}")
+    oidAct3 = AddSliderOption("Regional Snowy",    GetFE("weights.regional.3", 25.0), "{0}")
 
     ; Actual (current, immediate weather)
-    oidInterior = AddSliderOption("Actual Pleasant", GetF("weights.actual.0", 0.0),  "{0}")
-    oidExterior = AddSliderOption("Actual Cloudy",   GetF("weights.actual.1", 10.0), "{0}")
-    oidSave     = AddSliderOption("Actual Rainy",    GetF("weights.actual.2", 25.0), "{0}")
-    oidReload   = AddSliderOption("Actual Snowy",    GetF("weights.actual.3", 40.0), "{0}")
+    oidInterior = AddSliderOption("Actual Pleasant", GetFE("weights.actual.0", 0.0),  "{0}")
+    oidExterior = AddSliderOption("Actual Cloudy",   GetFE("weights.actual.1", 10.0), "{0}")
+    oidSave     = AddSliderOption("Actual Rainy",    GetFE("weights.actual.2", 25.0), "{0}")
+    oidReload   = AddSliderOption("Actual Snowy",    GetFE("weights.actual.3", 40.0), "{0}")
 
-    oidNightStart = AddSliderOption("Interior", GetF("weights.interior", 0.0), "{0}") ; -500..0 via slider open
-    oidNightEnd   = AddSliderOption("Exterior", GetF("weights.exterior", 5.0), "{0}")
+    oidNightStart = AddSliderOption("Interior", GetFE("weights.interior", 0.0), "{0}") ; -500..0 via slider open
+    oidNightEnd   = AddSliderOption("Exterior", GetFE("weights.exterior", 5.0), "{0}")
 
-    oidNightMul = AddSliderOption("Night multiplier", GetF("night.multiplier", 1.25), "{1}") ; 0..10 step 0.1
+    oidNightMul = AddSliderOption("Night multiplier", GetFE("night.multiplier", 1.25), "{1}") ; 0..10 step 0.1
 EndFunction
 
-Float Function GetF(String path, Float fallback)
-    return JsonUtil.GetFloatValue(ConfigPath, path, fallback)
-EndFunction
-
-Int Function GetI(String path, Int fallback)
-    Float f = JsonUtil.GetFloatValue(ConfigPath, path, fallback as Float)
-    return f as Int
-EndFunction
-
-String Function GetS(String path, String fallback)
-    return JsonUtil.GetStringValue(ConfigPath, path, fallback)
-EndFunction
-
-Function SetF(String path, Float v)
-    JsonUtil.SetFloatValue(ConfigPath, path, v)
-EndFunction
-
-Event OnOptionSliderOpen(Int option)
-    ; Player slot sliders: 0..500 integer
-    if option == oidKWLen || option == oidReg0 || option == oidReg1 || option == oidReg2 || option == oidReg3
-        SetSliderDialogRange(0.0, 500.0)
-        SetSliderDialogInterval(1.0)
-        Float cur = 0.0
-        if option == oidKWLen
-            cur = GetF("player.slots.helmet.bonus", 5.0)
-        elseif option == oidReg0
-            cur = GetF("player.slots.armor.bonus", 12.0)
-        elseif option == oidReg1
-            cur = GetF("player.slots.boots.bonus", 5.0)
-        elseif option == oidReg2
-            cur = GetF("player.slots.bracelets.bonus", 3.0)
-        elseif option == oidReg3
-            cur = GetF("player.slots.cloak.bonus", 6.0)
-        endif
-        SetSliderDialogStartValue(cur)
-        SetSliderDialogDefaultValue(cur)
+; ===== Config helpers (split files) =====
+Function EnsureEnvCfg()
+    if _envOk
         return
     endif
+    Bool ok = JsonUtil.Load(_envCfg)
+    _envOk = ok
+    if SS_DEBUG
+        Debug.Trace("[SS_MCM] EnsureEnvCfg ok=" + ok + " path=" + _envCfg)
+        if !ok
+            Debug.Trace("[SS_MCM] ERROR: Could not load env config at path=" + _envCfg)
+        endif
+    endif
+EndFunction
 
+Float Function GetFE(String path, Float fallback)
+    EnsureEnvCfg()
+    return JsonUtil.GetFloatValue(_envCfg, path, fallback)
+EndFunction
+
+Function SetFE(String path, Float v)
+    EnsureEnvCfg()
+    JsonUtil.SetFloatValue(_envCfg, path, v)
+EndFunction
+
+; (unused with split helpers) Int Function GetI(String path, Int fallback)
+;     Float f = JsonUtil.GetFloatValue(ConfigPath, path, fallback as Float)
+;     return f as Int
+; EndFunction
+
+; (unused with split helpers) String Function GetS(String path, String fallback)
+;     return JsonUtil.GetStringValue(ConfigPath, path, fallback)
+; EndFunction
+
+; (unused with split helpers) Function SetF(String path, Float v)
+;     JsonUtil.SetFloatValue(ConfigPath, path, v)
+; EndFunction
+
+Event OnOptionSliderOpen(Int option)
     ; Regional / Actual / Exterior: 0..500
-    if option == oidAct0 || option == oidAct1 || option == oidAct2 || option == oidAct3 || option == oidInterior || option == oidExterior || option == oidSave || option == oidReload
+    if option == oidAct0 || option == oidAct1 || option == oidAct2 || option == oidAct3 || option == oidInterior || option == oidExterior || option == oidSave || option == oidReload || option == oidNightEnd
         SetSliderDialogRange(0.0, 500.0)
         SetSliderDialogInterval(1.0)
         Float cur2 = 0.0
         if option == oidAct0
-            cur2 = GetF("weights.regional.0", 0.0)
+            cur2 = GetFE("weights.regional.0", 0.0)
         elseif option == oidAct1
-            cur2 = GetF("weights.regional.1", 5.0)
+            cur2 = GetFE("weights.regional.1", 5.0)
         elseif option == oidAct2
-            cur2 = GetF("weights.regional.2", 15.0)
+            cur2 = GetFE("weights.regional.2", 15.0)
         elseif option == oidAct3
-            cur2 = GetF("weights.regional.3", 25.0)
+            cur2 = GetFE("weights.regional.3", 25.0)
         elseif option == oidInterior
-            cur2 = GetF("weights.actual.0", 0.0)
+            cur2 = GetFE("weights.actual.0", 0.0)
         elseif option == oidExterior
-            cur2 = GetF("weights.actual.1", 10.0)
+            cur2 = GetFE("weights.actual.1", 10.0)
         elseif option == oidSave
-            cur2 = GetF("weights.actual.2", 25.0)
+            cur2 = GetFE("weights.actual.2", 25.0)
         elseif option == oidReload
-            cur2 = GetF("weights.actual.3", 40.0)
+            cur2 = GetFE("weights.actual.3", 40.0)
+        elseif option == oidNightEnd
+            cur2 = GetFE("weights.exterior", 5.0)
         endif
         SetSliderDialogStartValue(cur2)
         SetSliderDialogDefaultValue(cur2)
@@ -372,7 +457,7 @@ Event OnOptionSliderOpen(Int option)
     if option == oidNightStart
         SetSliderDialogRange(-500.0, 0.0)
         SetSliderDialogInterval(1.0)
-        Float cur3 = GetF("weights.interior", 0.0)
+        Float cur3 = GetFE("weights.interior", 0.0)
         SetSliderDialogStartValue(cur3)
         SetSliderDialogDefaultValue(cur3)
         return
@@ -382,7 +467,7 @@ Event OnOptionSliderOpen(Int option)
     if option == oidNightMul
         SetSliderDialogRange(0.0, 10.0)
         SetSliderDialogInterval(0.1)
-        Float cur4 = GetF("night.multiplier", 1.25)
+        Float cur4 = GetFE("night.multiplier", 1.25)
         SetSliderDialogStartValue(cur4)
         SetSliderDialogDefaultValue(cur4)
         return
@@ -390,62 +475,49 @@ Event OnOptionSliderOpen(Int option)
 EndEvent
 
 Event OnOptionSliderAccept(Int option, Float value)
-    ; Player slots
-    if option == oidKWLen
-        SetF("player.slots.helmet.bonus", value)
-        SetSliderOptionValue(option, value, "{0}")
-    elseif option == oidReg0
-        SetF("player.slots.armor.bonus", value)
-        SetSliderOptionValue(option, value, "{0}")
-    elseif option == oidReg1
-        SetF("player.slots.boots.bonus", value)
-        SetSliderOptionValue(option, value, "{0}")
-    elseif option == oidReg2
-        SetF("player.slots.bracelets.bonus", value)
-        SetSliderOptionValue(option, value, "{0}")
-    elseif option == oidReg3
-        SetF("player.slots.cloak.bonus", value)
-        SetSliderOptionValue(option, value, "{0}")
     ; Regional
-    elseif option == oidAct0
-        SetF("weights.regional.0", value)
+    if option == oidAct0
+        SetFE("weights.regional.0", value)
         SetSliderOptionValue(option, value, "{0}")
     elseif option == oidAct1
-        SetF("weights.regional.1", value)
+        SetFE("weights.regional.1", value)
         SetSliderOptionValue(option, value, "{0}")
     elseif option == oidAct2
-        SetF("weights.regional.2", value)
+        SetFE("weights.regional.2", value)
         SetSliderOptionValue(option, value, "{0}")
     elseif option == oidAct3
-        SetF("weights.regional.3", value)
+        SetFE("weights.regional.3", value)
         SetSliderOptionValue(option, value, "{0}")
     ; Actual
     elseif option == oidInterior
-        SetF("weights.actual.0", value)
+        SetFE("weights.actual.0", value)
         SetSliderOptionValue(option, value, "{0}")
     elseif option == oidExterior
-        SetF("weights.actual.1", value)
+        SetFE("weights.actual.1", value)
         SetSliderOptionValue(option, value, "{0}")
     elseif option == oidSave
-        SetF("weights.actual.2", value)
+        SetFE("weights.actual.2", value)
         SetSliderOptionValue(option, value, "{0}")
     elseif option == oidReload
-        SetF("weights.actual.3", value)
+        SetFE("weights.actual.3", value)
         SetSliderOptionValue(option, value, "{0}")
     ; Interior / Exterior (weights)
     elseif option == oidNightStart
-        SetF("weights.interior", value)
+        SetFE("weights.interior", value)
         SetSliderOptionValue(option, value, "{0}")
     elseif option == oidNightEnd
-        SetF("weights.exterior", value)
+        SetFE("weights.exterior", value)
         SetSliderOptionValue(option, value, "{0}")
     ; Night multiplier
     elseif option == oidNightMul
-        SetF("night.multiplier", value)
+        SetFE("night.multiplier", value)
         SetSliderOptionValue(option, value, "{1}")
     endif
 
-    JsonUtil.Save(ConfigPath)
+    ; Save environment config if loaded
+    if _envOk
+        JsonUtil.Save(_envCfg)
+    endif
     ; Request a recompute + re-emit
     FireManualTick("MCMRefresh")
     RegisterForSingleUpdate(0.25)
@@ -453,6 +525,14 @@ EndEvent
 
 Event OnUpdate()
     ; After a short delay post-refresh, ask subsystems to re-emit and then paint cached numbers
+    if SS_DEBUG
+        Debug.Trace("[SS_MCM] OnUpdate -> RequestWeatherStatus + RefreshOverview + RefreshWeatherClasses")
+    endif
+    if !Utility.IsInMenuMode()
+        return
+    endif
     RequestWeatherStatus()
     RefreshOverview()
+    RefreshWeatherClasses()
+    SafeSet(oidRefresh, "?")
 EndEvent

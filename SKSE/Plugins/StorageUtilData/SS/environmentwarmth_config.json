@@ -1,0 +1,40 @@
+{
+	"float" : 
+	{
+		"weights.actual.0" : 284.0,
+		"weights.actual.1" : 69.0,
+		"weights.actual.2" : 393.0,
+		"weights.actual.3" : 133.0,
+		"weights.exterior" : 0.0,
+		"weights.interior" : 0.0,
+		"weights.regional.0" : 122.0,
+		"weights.regional.1" : 86.0,
+		"weights.regional.2" : 113.0,
+		"weights.regional.3" : 214.0
+	},
+	"night" : 
+	{
+		"endHour" : 6.0,
+		"multiplier" : 1.25,
+		"startHour" : 20.0
+	},
+	"weights" : 
+	{
+		"actual" : 
+		{
+			"0" : 0.0,
+			"1" : 10.0,
+			"2" : 25.0,
+			"3" : 40.0
+		},
+		"exterior" : 5.0,
+		"interior" : 0.0,
+		"regional" : 
+		{
+			"0" : 0.0,
+			"1" : 5.0,
+			"2" : 15.0,
+			"3" : 25.0
+		}
+	}
+}

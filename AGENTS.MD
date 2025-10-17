@@ -23,7 +23,7 @@ It can explain, review, or generate `.psc` scripts and reference the Creation Ki
    It can only *analyze*, *review*, or *generate* script text for human or compiler use.
 
 2. **File Scope Restriction**
-   Only review and modify files with the `.psc` extension.
+   Only review and modify files with the `.psc` and `.log` and `.0.log` extensions.
    Do not open or analyze non-script files (e.g., `.pex`, `.txt`, `.html`, `.png`).
 
 3. **In-Game Behavior Simulation**

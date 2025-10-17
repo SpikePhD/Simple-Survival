@@ -3,7 +3,8 @@ Scriptname SS_WeatherEnvironment extends Quest
 ; ====== Debug / Config ======
 bool   Property SS_DEBUG     Auto ; set TRUE in CK to spam logs
 Bool   Property DebugLog     = False Auto
-String Property ConfigPath   = "Data/SKSE/Plugins/SS_WeatherConfig.json" Auto
+String Property ConfigPath   = "SS/environmentwarmth_config.json" Auto
+Bool   _cfgOk         = False
 
 ; ---------- Build/Version Tag ----------
 string Property SS_BUILD_TAG Auto
@@ -19,9 +20,29 @@ Function Log(String s)
 	endif
 EndFunction
 
+; Ensure the JSON is loaded once; prefer env-specific file only (no legacy fallback)
+Function EnsureConfigLoaded()
+	if _cfgOk
+		return
+	endif
+	Bool ok = JsonUtil.Load(ConfigPath)
+	_cfgOk = ok
+	if SS_DEBUG
+		Debug.Trace("[SS_WeatherEnvironment] EnsureConfigLoaded ok=" + ok + " path=" + ConfigPath)
+		if !ok
+			Debug.Trace("[SS_WeatherEnvironment] ERROR: Could not load environment config at ConfigPath=" + ConfigPath)
+		endif
+	endif
+EndFunction
+
 Float Function ReadCfgFloat(String sectionPath, Float fallback)
+	EnsureConfigLoaded()
 	; JsonUtil returns fallback when key is missing; Papyrus floats cannot be None
-	return JsonUtil.GetFloatValue(ConfigPath, sectionPath, fallback)
+	Float v = JsonUtil.GetFloatValue(ConfigPath, sectionPath, fallback)
+	if SS_DEBUG && v == fallback
+		Debug.Trace("[SS_WeatherEnvironment] Fallback float for " + sectionPath + " -> " + v)
+	endif
+	return v
 EndFunction
 
 Float Function DefaultClassWeight(Int c)
@@ -78,6 +99,8 @@ Event OnInit()
 	if SS_BUILD_TAG == ""
 		SS_BUILD_TAG = "Env 2025-10-16.c"
 	endif
+	; Prime config load early so any path problems are logged once
+	EnsureConfigLoaded()
 	Debug.Trace("[SS_WeatherEnvironment] OnInit build=" + SS_BUILD_TAG)
 EndEvent
 
@@ -114,6 +137,11 @@ Function HandleTick(Float numArg, Form sender)
 	Cell c = p.GetParentCell()
 	if c
 		isInterior = c.IsInterior()
+	endif
+
+	; Debug snapshot of what we saw this tick
+	if SS_DEBUG
+		Debug.Trace("[SS_WeatherEnvironment] classRegional=" + classRegional + " classActual=" + classActual + " isInterior=" + isInterior)
 	endif
 
 	Float regWeight = ReadCfgFloat("weights.regional." + classRegional, DefaultClassWeight(classRegional))

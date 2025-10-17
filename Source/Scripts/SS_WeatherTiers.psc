@@ -17,6 +17,7 @@ String _lastReason = ""
 ; ===== Cached outputs for re-emit to MCM =====
 Float _lastPct  = 0.0
 Int   _lastTier = 0
+Int   _lastId   = 0
 
 ; ===== Utilities =====
 Function Log(String s)
@@ -55,8 +56,20 @@ Int Function ComputeTier(Float pct)
 	return t
 EndFunction
 
+; ===== Id match helper (for 4-arg events) =====
+Bool Function _MatchesCurrentId(String sid)
+	if sid == ""
+		return True ; allow 3-arg/legacy paths
+	endif
+	Int incoming = sid as Int
+	return incoming == _currentId
+EndFunction
+
 Function TryComputeAndEmit()
 	if !_haveEnv || !_havePlayer
+		if SS_DEBUG
+			Debug.Trace("[SS_WeatherTiers] Waiting: env=" + _haveEnv + " player=" + _havePlayer + " id=" + _currentId + " reason=" + _lastReason)
+		endif
 		return
 	endif
 
@@ -79,6 +92,10 @@ Function TryComputeAndEmit()
 	; cache last results for status re-emit
 	_lastPct  = pct
 	_lastTier = tier
+	_lastId   = _currentId
+	if SS_DEBUG
+		Debug.Trace("[SS_WeatherTiers] pct=" + pct + " tier=" + tier + " env=" + _envVal + " player=" + _playerVal + " reason=" + _lastReason)
+	endif
 
 	EmitTierResults(detailTier, pct, detailLevel, tier)
 
@@ -127,7 +144,7 @@ Event OnInit()
 	RegisterForModEvent("SS_WeatherPlayerResult4", "OnPlayer4")
 	RegisterForModEvent("SS_RequestWeatherStatus", "OnRequestStatus")
 	if SS_BUILD_TAG == ""
-		SS_BUILD_TAG = "Tiers 2025-10-16.e"
+		SS_BUILD_TAG = "Tiers 2025-10-17.f"
 	endif
 	Debug.Trace("[SS_WeatherTiers] OnInit build=" + SS_BUILD_TAG)
 EndEvent
@@ -151,7 +168,7 @@ Function HandleTick(String reason, Float numArg, Form sender)
 	_haveEnv = False
 	_havePlayer = False
 	if SS_DEBUG
-		Debug.Trace("[SS_WeatherTiers] HandleTick id=" + _currentId + " reason=" + reason + " sender=" + sender)
+		Debug.Trace("[SS_WeatherTiers] HandleTick id=" + _currentId + " reason=" + reason + " sender=" + sender + " (reset env/player flags)")
 	endif
 EndFunction
 
@@ -159,26 +176,44 @@ EndFunction
 Event OnEnv3(String evn, String detail, Float f, Form sender)
 	_envVal = f
 	_haveEnv = True
+	if SS_DEBUG
+		Debug.Trace("[SS_WeatherTiers] OnEnv3 id=" + _currentId + " f=" + f + " sender=" + sender)
+	endif
 	TryComputeAndEmit()
 EndEvent
 
 Event OnPlayer3(String evn, String detail, Float f, Form sender)
 	_playerVal = f
 	_havePlayer = True
+	if SS_DEBUG
+		Debug.Trace("[SS_WeatherTiers] OnPlayer3 id=" + _currentId + " f=" + f + " sender=" + sender)
+	endif
 	TryComputeAndEmit()
 EndEvent
 
 Event OnEnv4(String evn, String s, Float f, Form sender)
+	if !_MatchesCurrentId(s)
+		if SS_DEBUG
+			Debug.Trace("[SS_WeatherTiers] Ignored Env id=" + s + " (current=" + _currentId + ")")
+		endif
+		return
+	endif
 	OnEnv3(evn, s, f, sender)
 EndEvent
 
 Event OnPlayer4(String evn, String s, Float f, Form sender)
+	if !_MatchesCurrentId(s)
+		if SS_DEBUG
+			Debug.Trace("[SS_WeatherTiers] Ignored Player id=" + s + " (current=" + _currentId + ")")
+		endif
+		return
+	endif
 	OnPlayer3(evn, s, f, sender)
 EndEvent
 
 ; ===== respond to MCM status request (re-emit last known) =====
 Event OnRequestStatus(String evn, String detail, Float f, Form sender)
-	String detailTier  = "id=" + _currentId + ";tier=" + _lastTier + ";reason=StatusRequest"
-	String detailLevel = "id=" + _currentId + ";pct=" + _lastPct  + ";reason=StatusRequest"
+	String detailTier  = "id=" + _lastId + ";tier=" + _lastTier + ";reason=StatusRequest"
+	String detailLevel = "id=" + _lastId + ";pct=" + _lastPct  + ";reason=StatusRequest"
 	EmitTierResults(detailTier, _lastPct, detailLevel, _lastTier)
 EndEvent
