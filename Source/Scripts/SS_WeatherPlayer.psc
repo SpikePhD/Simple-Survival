@@ -4,8 +4,12 @@ Bool   Property DebugLog = False Auto
 String Property ConfigPath = "Data/SKSE/Plugins/SS_WeatherConfig.json" Auto
 
 ; ---------- Build/Version Tag + Debug ----------
-bool   property SS_DEBUG    auto
-string property SS_BUILD_TAG auto
+bool   Property SS_DEBUG     Auto
+string Property SS_BUILD_TAG Auto
+
+; ========= Cached snapshot for re-emit to MCM =========
+Int   _lastSnapshotId = 0
+Float _lastWarmth     = 0.0
 
 Function Log(String s)
 	if DebugLog
@@ -14,144 +18,88 @@ Function Log(String s)
 EndFunction
 
 Float Function ReadCfgFloat(String path, Float fallback)
-	Float v = JsonUtil.GetFloatValue(ConfigPath, path, fallback)
-	return v
+	return JsonUtil.GetFloatValue(ConfigPath, path, fallback)
 EndFunction
 
 Int Function ReadCfgInt(String path, Int fallback)
 	Float f = JsonUtil.GetFloatValue(ConfigPath, path, fallback as Float)
-	Int v = f as Int
-	return v
+	return f as Int
 EndFunction
 
 String Function ReadCfgString(String path, String fallback)
-	String s = JsonUtil.GetStringValue(ConfigPath, path, fallback)
-	return s
+	return JsonUtil.GetStringValue(ConfigPath, path, fallback)
 EndFunction
 
-Int Function CollectWornArmorsFromMaskList(Actor p, Armor[] outArmors)
-	if !p
-		return 0
-	endif
-
-	Int n = ReadCfgInt("player.maskBonuses.len", 0)
-	if n <= 0
-		return 0
-	endif
-
-	Bool dedupe = False
-	Float fdd = JsonUtil.GetFloatValue(ConfigPath, "player.maskBonuses.dedupeSameForm", 1.0)
-	if fdd >= 0.5
-		dedupe = True
-	endif
-
-	Int outCount = 0
-	Int i = 0
-	while i < n
-		String base = "player.maskBonuses." + i
-		Int mask = ReadCfgInt(base + ".mask", 0)
-		if mask > 0
-			Form f = p.GetWornForm(mask)
-			if f
-				Armor a = f as Armor
-				if a
-					Bool already = False
-					if dedupe
-						Int j = 0
-						while j < outCount
-							if outArmors[j] == a
-								already = True
-							endif
-							j = j + 1
-						endwhile
-					endif
-					if !already
-						outArmors[outCount] = a
-						outCount = outCount + 1
-					endif
-				endif
+; ===== Slots-only base values =====
+; Reads up to 3 alternative masks for a slot and reports if anything is worn
+Bool Function SlotEquipped(Actor p, String basePath)
+	Int m1 = ReadCfgInt(basePath + ".mask", 0)
+	Int m2 = ReadCfgInt(basePath + ".mask2", 0)
+	Int m3 = ReadCfgInt(basePath + ".mask3", 0)
+	Form f
+	if m1 > 0
+		f = p.GetWornForm(m1)
+		if f
+			if SS_DEBUG
+				String ed = PO3_SKSEFunctions.GetFormEditorID(f)
+				Debug.Trace("[SS_WeatherPlayer] " + basePath + " matched mask m1=" + m1 + " form=" + f + " edid=" + ed)
 			endif
+			return True
 		endif
-		i = i + 1
-	endwhile
-
-	return outCount
+	endif
+	if m2 > 0
+		f = p.GetWornForm(m2)
+		if f
+			if SS_DEBUG
+				String ed2 = PO3_SKSEFunctions.GetFormEditorID(f)
+				Debug.Trace("[SS_WeatherPlayer] " + basePath + " matched mask m2=" + m2 + " form=" + f + " edid=" + ed2)
+			endif
+			return True
+		endif
+	endif
+	if m3 > 0
+		f = p.GetWornForm(m3)
+		if f
+			if SS_DEBUG
+				String ed3 = PO3_SKSEFunctions.GetFormEditorID(f)
+				Debug.Trace("[SS_WeatherPlayer] " + basePath + " matched mask m3=" + m3 + " form=" + f + " edid=" + ed3)
+			endif
+			return True
+		endif
+	endif
+	return False
 EndFunction
 
-Float Function GetWeightClassBonus(Armor a)
-	if !a
+Float Function SlotBaseBonusIfEquipped(Actor p, String slotKey)
+	String base = "player.slots." + slotKey
+	Float bonus = ReadCfgFloat(base + ".bonus", 0.0)
+	if bonus <= 0.0
 		return 0.0
 	endif
-
-	Bool isCloth = a.IsClothingHead() || a.IsClothingBody() || a.IsClothingHands() || a.IsClothingFeet()
-	if isCloth
-		return ReadCfgFloat("player.weightClass.clothing", 0.0)
+	if SlotEquipped(p, base)
+		if SS_DEBUG
+			Debug.Trace("[SS_WeatherPlayer] slot=" + slotKey + " equipped ? +" + bonus)
+		endif
+		return bonus
 	endif
-
-	Int wc = a.GetWeightClass()
-	if wc == 0
-		return ReadCfgFloat("player.weightClass.light", 0.0)
-	elseif wc == 1
-		return ReadCfgFloat("player.weightClass.heavy", 0.0)
+	if SS_DEBUG
+		Debug.Trace("[SS_WeatherPlayer] slot=" + slotKey + " not equipped")
 	endif
 	return 0.0
 EndFunction
 
-Float Function SumMaskBonuses(Actor p)
-	if !p
-		return 0.0
-	endif
-
+Float Function SumBaseSlots(Actor p)
 	Float total = 0.0
-	Bool enabled = JsonUtil.GetFloatValue(ConfigPath, "player.maskBonuses.enabled", 0.0) >= 0.5
-	if !enabled
-		return total
-	endif
-
-	Int n = ReadCfgInt("player.maskBonuses.len", 0)
-	if n <= 0
-		return total
-	endif
-
-	Bool dedupe = JsonUtil.GetFloatValue(ConfigPath, "player.maskBonuses.dedupeSameForm", 1.0) >= 0.5
-	Form[] seen = None
-	Int seenCount = 0
-	if dedupe
-		seen = new Form[64]
-	endif
-
-	Int i = 0
-	while i < n
-		String base = "player.maskBonuses." + i
-		Int mask = ReadCfgInt(base + ".mask", 0)
-		if mask > 0
-			Form f = p.GetWornForm(mask)
-			if f
-				if dedupe
-					Bool already = False
-					Int j = 0
-					while j < seenCount
-						if seen[j] == f
-							already = True
-						endif
-						j = j + 1
-					endwhile
-					if !already
-						seen[seenCount] = f
-						seenCount = seenCount + 1
-						total += ReadCfgFloat(base + ".bonus", 0.0)
-					endif
-				else
-					total += ReadCfgFloat(base + ".bonus", 0.0)
-				endif
-			endif
-		endif
-		i = i + 1
-	endwhile
-
+	; required keys in JSON: helmet, armor, boots, bracelets, cloak
+	total += SlotBaseBonusIfEquipped(p, "helmet")
+	total += SlotBaseBonusIfEquipped(p, "armor")
+	total += SlotBaseBonusIfEquipped(p, "boots")
+	total += SlotBaseBonusIfEquipped(p, "bracelets")
+	total += SlotBaseBonusIfEquipped(p, "cloak")
 	return total
 EndFunction
 
+; ===== Keyword bonuses (kept but optional; can be set to zero in JSON) =====
 Int Function GetKeywordBonusCount()
 	Int n = ReadCfgInt("player.keywordBonuses.len", 0)
 	if n < 0
@@ -169,7 +117,6 @@ Keyword Function ResolveKeywordFromJsonIndex(Int i)
 			return fEd as Keyword
 		endif
 	endif
-
 	String file = ReadCfgString(base + ".file", "")
 	Int idDec = ReadCfgInt(base + ".idDec", 0)
 	if file != "" && idDec > 0
@@ -181,33 +128,7 @@ Keyword Function ResolveKeywordFromJsonIndex(Int i)
 	return None
 EndFunction
 
-Armor Function GetWornArmorByMask(Actor p, Int mask)
-	if mask <= 0
-		return None
-	endif
-	Form f = p.GetWornForm(mask)
-	if !f
-		return None
-	endif
-	return f as Armor
-EndFunction
-
-Float Function SlotWarmthIfWorn(Actor p, String slotKey)
-	String base = "player.slots." + slotKey
-	Int mask = ReadCfgInt(base + ".mask", 0)
-	Float slotBonus = ReadCfgFloat(base + ".bonus", 0.0)
-	if mask <= 0
-		return 0.0
-	endif
-	Armor a = GetWornArmorByMask(p, mask)
-	if !a
-		return 0.0
-	endif
-	Float total = slotBonus + GetWeightClassBonus(a) + GetKeywordBonuses(a)
-	return total
-EndFunction
-
-Float Function GetKeywordBonuses(Armor a)
+Float Function GetKeywordBonusesFor(Armor a)
 	if !a
 		return 0.0
 	endif
@@ -227,54 +148,102 @@ Float Function GetKeywordBonuses(Armor a)
 	return total
 EndFunction
 
-Event OnInit()
-	RegisterForModEvent("SS_Tick3", "OnTick3")
-	RegisterForModEvent("SS_Tick4", "OnTick4")
-	if SS_BUILD_TAG == ""
-		SS_BUILD_TAG = "Player 2025-10-15.b"
+Float Function SumKeywordBonuses(Actor p)
+	; inspect all five slots for an Armor and add keyword bonuses
+	Float total = 0.0
+	; helmet
+	Int m = ReadCfgInt("player.slots.helmet.mask", 0)
+	if m > 0
+		Armor a = p.GetWornForm(m) as Armor
+		if a
+			total += GetKeywordBonusesFor(a)
+		endif
 	endif
-	Debug.Trace("[SS_WeatherPlayer] OnInit build=" + SS_BUILD_TAG)
-	if DebugLog
-		Log("OnInit")
+	; armor
+	m = ReadCfgInt("player.slots.armor.mask", 0)
+	if m > 0
+		Armor a2 = p.GetWornForm(m) as Armor
+		if a2
+			total += GetKeywordBonusesFor(a2)
+		endif
 	endif
-EndEvent
+	; boots
+	m = ReadCfgInt("player.slots.boots.mask", 0)
+	if m > 0
+		Armor a3 = p.GetWornForm(m) as Armor
+		if a3
+			total += GetKeywordBonusesFor(a3)
+		endif
+	endif
+	; bracelets
+	m = ReadCfgInt("player.slots.bracelets.mask", 0)
+	if m > 0
+		Armor a4 = p.GetWornForm(m) as Armor
+		if a4
+			total += GetKeywordBonusesFor(a4)
+		endif
+	endif
+	; cloak (check up to 3 masks for keywords too)
+	Int c1 = ReadCfgInt("player.slots.cloak.mask", 0)
+	Int c2 = ReadCfgInt("player.slots.cloak.mask2", 0)
+	Int c3 = ReadCfgInt("player.slots.cloak.mask3", 0)
+	Armor ac
+	if c1 > 0
+		ac = p.GetWornForm(c1) as Armor
+		if ac
+			total += GetKeywordBonusesFor(ac)
+		endif
+	endif
+	if c2 > 0
+		ac = p.GetWornForm(c2) as Armor
+		if ac
+			total += GetKeywordBonusesFor(ac)
+		endif
+	endif
+	if c3 > 0
+		ac = p.GetWornForm(c3) as Armor
+		if ac
+			total += GetKeywordBonusesFor(ac)
+		endif
+	endif
+	return total
+EndFunction
 
-Event OnPlayerLoadGame()
-	if DebugLog
-		Log("OnPlayerLoadGame")
-	endif
-EndEvent
-
-; 3-arg tick: (string, float, form)
-Event OnTick3(String eventName, String reason, Float numArg, Form sender)
-	HandleTick(numArg, sender)
-EndEvent
-
-; 4-arg tick: (string, string, float, form)
-Event OnTick4(String eventName, String reason, Float numArg, Form sender)
-	HandleTick(numArg, sender)
-EndEvent
-
-Function HandleTick(Float numArg, Form sender)
-	if SS_DEBUG
-		Debug.Trace("[SS_WeatherPlayer] HandleTick numArg=" + numArg + " sender=" + sender)
-	endif
-	Actor p = Game.GetPlayer()
-	if !p
-		Log("No player")
-		return
-	endif
-	Int snapshotId = numArg as Int
-	Float warmth = SumMaskBonuses(p)
-	Armor[] worn = new Armor[64]
-	Int count = CollectWornArmorsFromMaskList(p, worn)
-	Int k = 0
-	while k < count
-		warmth += GetKeywordBonuses(worn[k])
-		k = k + 1
+; ===== Debug: dump commonly used biped slot masks and the worn forms =====
+Function DumpWornCommonMasks(Actor p)
+	Int[] masks = new Int[18]
+	masks[0] = 1      ; Head
+	masks[1] = 2
+	masks[2] = 4      ; Body
+	masks[3] = 8
+	masks[4] = 16     ; Hands/Forearms
+	masks[5] = 32
+	masks[6] = 64
+	masks[7] = 128    ; Feet
+	masks[8] = 256
+	masks[9] = 512
+	masks[10] = 1024
+	masks[11] = 2048
+	masks[12] = 4096
+	masks[13] = 8192
+	masks[14] = 16384 ; Cloak alt in some mods
+	masks[15] = 32768
+	masks[16] = 65536 ; Cloak/Back
+	masks[17] = 131072
+	Int i = 0
+	while i < masks.Length
+		Int m = masks[i]
+		Form f = p.GetWornForm(m)
+		if f
+			String ed = PO3_SKSEFunctions.GetFormEditorID(f)
+			Debug.Trace("[SS_WeatherPlayer] WORN mask=" + m + " form=" + f + " edid=" + ed)
+		endif
+		i = i + 1
 	endwhile
+EndFunction
 
-	; ==== Emit on split channels: 4-arg + 3-arg fallback ====
+; ========= central emitter (v4 if possible + v3 fallback) =========
+Function EmitPlayerResults(Int snapshotId, Float warmth)
 	string sid = "" + snapshotId
 	int h = ModEvent.Create("SS_WeatherPlayerResult4")
 	bool okS = False
@@ -295,3 +264,59 @@ Function HandleTick(Float numArg, Form sender)
 	endif
 EndFunction
 
+; ========= lifecycle =========
+Event OnInit()
+	RegisterForModEvent("SS_Tick3", "OnTick3")
+	RegisterForModEvent("SS_Tick4", "OnTick4")
+	RegisterForModEvent("SS_RequestWeatherStatus", "OnRequestStatus")
+	if SS_BUILD_TAG == ""
+		SS_BUILD_TAG = "Player 2025-10-17.a"
+	endif
+	Debug.Trace("[SS_WeatherPlayer] OnInit build=" + SS_BUILD_TAG)
+	if DebugLog
+		Log("OnInit")
+	endif
+EndEvent
+
+; respond to MCM status request by re-emitting cached warmth
+Event OnRequestStatus(String evn, String detail, Float f, Form sender)
+	EmitPlayerResults(_lastSnapshotId, _lastWarmth)
+EndEvent
+
+; 3-arg tick: (string, float, form)
+Event OnTick3(String eventName, String reason, Float numArg, Form sender)
+	HandleTick(numArg, sender)
+EndEvent
+
+; 4-arg tick: (string, string, float, form)
+Event OnTick4(String eventName, String reason, Float numArg, Form sender)
+	HandleTick(numArg, sender)
+EndEvent
+
+Function HandleTick(Float numArg, Form sender)
+	Actor p = Game.GetPlayer()
+	if SS_DEBUG
+		Debug.Trace("[SS_WeatherPlayer] HandleTick numArg=" + numArg + " sender=" + sender + " p=" + p)
+	endif
+	if !p
+		Log("No player")
+		return
+	endif
+	Int snapshotId = numArg as Int
+	Float warmth = 0.0
+	; 1) base values from slots
+	Float baseTotal = SumBaseSlots(p)
+	; 2) optional keyword bonuses (can be all zeros in JSON)
+	Float kwTotal = SumKeywordBonuses(p)
+	warmth = baseTotal + kwTotal
+
+	_lastSnapshotId = snapshotId
+	_lastWarmth     = warmth
+
+	if SS_DEBUG
+		DumpWornCommonMasks(p)
+		Debug.Trace("[SS_WeatherPlayer] baseTotal=" + baseTotal + " kwTotal=" + kwTotal + " -> warmth=" + warmth)
+	endif
+
+	EmitPlayerResults(snapshotId, warmth)
+EndFunction

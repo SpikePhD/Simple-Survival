@@ -60,7 +60,7 @@ EndFunction
 ; ========= Lifecycle =========
 Event OnInit()
     if SS_BUILD_TAG == ""
-        SS_BUILD_TAG = "Tick 2025-10-15.b"
+        SS_BUILD_TAG = "Tick 2025-10-16.c"
     endif
     Debug.Trace("[SS_WeatherTick] OnInit build=" + SS_BUILD_TAG)
 
@@ -75,11 +75,15 @@ Event OnInit()
     PO3_Events_Alias.RegisterForWeatherChange(self)
     PO3_Events_Alias.RegisterForOnPlayerFastTravelEnd(self)
     PO3_Events_Alias.RegisterForCellFullyLoaded(self)
+
+    ; prime downstream systems once on init so their first page open has data
+    FireTick("Init")
 EndEvent
 
 Event OnPlayerLoadGame()
     Log("OnPlayerLoadGame")
     InitSnapshots()
+    FireTick("Loaded")
 EndEvent
 
 Function InitSnapshots()
@@ -91,9 +95,9 @@ Function InitSnapshots()
     _lastLocation      = p.GetCurrentLocation()
     Cell pc = p.GetParentCell()
     if pc
-        _lastIsInterior    = pc.IsInterior()
+        _lastIsInterior = pc.IsInterior()
     else
-        _lastIsInterior    = False
+        _lastIsInterior = False
     endif
 EndFunction
 
@@ -112,7 +116,8 @@ Event OnCellFullyLoaded(Cell akCell)
     if !p
         return
     endif
-    Bool nowInterior = p.GetParentCell() && p.GetParentCell().IsInterior()
+    Cell pc = p.GetParentCell()
+    Bool nowInterior = pc && pc.IsInterior()
     if nowInterior != _lastIsInterior
         _lastIsInterior = nowInterior
         if nowInterior
@@ -134,7 +139,8 @@ Event OnCellLoad()
     if !p
         return
     endif
-    Bool nowInterior = p.GetParentCell() && p.GetParentCell().IsInterior()
+    Cell pc = p.GetParentCell()
+    Bool nowInterior = pc && pc.IsInterior()
     if nowInterior != _lastIsInterior
         _lastIsInterior = nowInterior
         if nowInterior
@@ -191,4 +197,3 @@ Event OnMenuClose(String menuName)
         FireTick("MCMClose")
     endif
 EndEvent
-

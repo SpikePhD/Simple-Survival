@@ -1,12 +1,16 @@
 Scriptname SS_WeatherEnvironment extends Quest
 
 ; ====== Debug / Config ======
-bool   property SS_DEBUG    auto ; set TRUE in CK to spam logs
+bool   Property SS_DEBUG     Auto ; set TRUE in CK to spam logs
 Bool   Property DebugLog     = False Auto
 String Property ConfigPath   = "Data/SKSE/Plugins/SS_WeatherConfig.json" Auto
 
 ; ---------- Build/Version Tag ----------
-string property SS_BUILD_TAG auto
+string Property SS_BUILD_TAG Auto
+
+; ---------- Cached snapshot for re-emit to MCM ----------
+Int   _lastSnapshotId = 0
+Float _lastDifficulty = 0.0
 
 ; ====== Utilities ======
 Function Log(String s)
@@ -18,6 +22,19 @@ EndFunction
 Float Function ReadCfgFloat(String sectionPath, Float fallback)
 	; JsonUtil returns fallback when key is missing; Papyrus floats cannot be None
 	return JsonUtil.GetFloatValue(ConfigPath, sectionPath, fallback)
+EndFunction
+
+Float Function DefaultClassWeight(Int c)
+	; sensible defaults if JSON is missing
+	if c == 0
+		return 0.0
+	elseif c == 1
+		return 5.0
+	elseif c == 2
+		return 15.0
+	else
+		return 25.0
+	endif
 EndFunction
 
 Int Function ClampClass(Int c)
@@ -57,8 +74,9 @@ Event OnInit()
 	Log("OnInit")
 	RegisterForModEvent("SS_Tick3", "OnTick3")
 	RegisterForModEvent("SS_Tick4", "OnTick4")
+	RegisterForModEvent("SS_RequestWeatherStatus", "OnRequestStatus")
 	if SS_BUILD_TAG == ""
-		SS_BUILD_TAG = "Env 2025-10-15.b"
+		SS_BUILD_TAG = "Env 2025-10-16.c"
 	endif
 	Debug.Trace("[SS_WeatherEnvironment] OnInit build=" + SS_BUILD_TAG)
 EndEvent
@@ -98,14 +116,17 @@ Function HandleTick(Float numArg, Form sender)
 		isInterior = c.IsInterior()
 	endif
 
-	Float regWeight = ReadCfgFloat("weights.regional." + classRegional, 0.0)
-	Float actWeight = ReadCfgFloat("weights.actual."   + classActual,   0.0)
+	Float regWeight = ReadCfgFloat("weights.regional." + classRegional, DefaultClassWeight(classRegional))
+	Float actWeight = ReadCfgFloat("weights.actual."   + classActual,   DefaultClassWeight(classActual))
 	Float wInterior = ReadCfgFloat("weights.interior", 0.0)
 	Float wExterior = ReadCfgFloat("weights.exterior", 0.0)
 
 	Float nightStart = ReadCfgFloat("night.startHour", 20.0)
 	Float nightEnd   = ReadCfgFloat("night.endHour",   6.0)
 	Float nightMul   = ReadCfgFloat("night.multiplier", 1.0)
+	if nightMul < 0.0
+		nightMul = 0.0 ; avoid negative difficulty flips
+	endif
 
 	Float shelter = 0.0
 	if isInterior
@@ -121,10 +142,16 @@ Function HandleTick(Float numArg, Form sender)
 		finalDifficulty = baseDifficulty * nightMul
 	endif
 
-	; ==== Emit results on split channels ====
-	string sid = "" + snapshotId
-	float difficulty = finalDifficulty
+	; cache for re-emit
+	_lastSnapshotId = snapshotId
+	_lastDifficulty = finalDifficulty
 
+	EmitEnvResults(snapshotId, finalDifficulty)
+EndFunction
+
+; ========= central emitter (v4 if possible + v3 fallback) =========
+Function EmitEnvResults(Int snapshotId, Float difficulty)
+	string sid = "" + snapshotId
 	; 4-arg channel (when supported)
 	int h = ModEvent.Create("SS_WeatherEnvResult4")
 	bool okS = False
@@ -147,6 +174,12 @@ Function HandleTick(Float numArg, Form sender)
 		Debug.Trace("[SS_WeatherEnvironment] Emit " + SS_BUILD_TAG + " id=" + sid + " diff=" + difficulty + " okS=" + okS + " okF=" + okF + " okFm=" + okFm + " sent4=" + sent4 + " (also sent EnvResult3 fallback)")
 	endif
 EndFunction
+
+; ========= respond to MCM status request =========
+Event OnRequestStatus(String evn, String detail, Float f, Form sender)
+	; Re-emit last known values so the MCM can populate immediately
+	EmitEnvResults(_lastSnapshotId, _lastDifficulty)
+EndEvent
 
 Event OnPlayerLoadGame()
 	Log("OnPlayerLoadGame")

@@ -3,16 +3,20 @@ Scriptname SS_WeatherTiers extends Quest
 Bool Property DebugLog = False Auto
 
 ; ---------- Build/Version Tag + Debug ----------
-bool   property SS_DEBUG    auto
-string property SS_BUILD_TAG auto
+bool   Property SS_DEBUG     Auto
+string Property SS_BUILD_TAG Auto
 
 ; ===== Internal state for the current tick =====
-Int   _currentId = 0
-Bool  _haveEnv = False
-Bool  _havePlayer = False
-Float _envVal = 0.0
-Float _playerVal = 0.0
+Int   _currentId   = 0
+Bool  _haveEnv     = False
+Bool  _havePlayer  = False
+Float _envVal      = 0.0
+Float _playerVal   = 0.0
 String _lastReason = ""
+
+; ===== Cached outputs for re-emit to MCM =====
+Float _lastPct  = 0.0
+Int   _lastTier = 0
 
 ; ===== Utilities =====
 Function Log(String s)
@@ -56,27 +60,43 @@ Function TryComputeAndEmit()
 		return
 	endif
 
-	Float pct = 0.0
+	Float pct
 	if _envVal <= 0.0
-		pct = 100.0
+		if _playerVal <= 0.0
+			pct = 0.0
+		else
+			pct = 100.0
+		endif
 	else
 		pct = (_playerVal / _envVal) * 100.0
 	endif
 	pct = ClampFloat(pct, 0.0, 100.0)
 
 	Int tier = ComputeTier(pct)
-	String detailTier = "id=" + _currentId + ";tier=" + tier + ";reason=" + _lastReason
+	String detailTier  = "id=" + _currentId + ";tier=" + tier + ";reason=" + _lastReason
 	String detailLevel = "id=" + _currentId + ";pct=" + pct + ";reason=" + _lastReason
 
+	; cache last results for status re-emit
+	_lastPct  = pct
+	_lastTier = tier
+
+	EmitTierResults(detailTier, pct, detailLevel, tier)
+
+	_haveEnv = False
+	_havePlayer = False
+EndFunction
+
+; ===== Central emitters (push order fixed: String -> Float -> Form) =====
+Function EmitTierResults(String detailTier, Float pct, String detailLevel, Int tier)
 	; 1) SS_WeatherTier
 	Int h1 = ModEvent.Create("SS_WeatherTier")
 	if h1
-		Bool okF1 = ModEvent.PushFloat(h1, pct)
 		Bool okS1 = ModEvent.PushString(h1, detailTier)
+		Bool okF1 = ModEvent.PushFloat(h1, pct)
 		Bool okFm1 = ModEvent.PushForm(h1, Self as Form)
-		if okF1 && okS1 && okFm1
+		if okS1 && okF1 && okFm1
 			ModEvent.Send(h1)
-		elseif okF1 && okS1
+		elseif okS1 && okF1
 			ModEvent.Send(h1)
 		endif
 	endif
@@ -85,19 +105,16 @@ Function TryComputeAndEmit()
 	; 2) SS_WeatherTierLevel
 	Int h2 = ModEvent.Create("SS_WeatherTierLevel")
 	if h2
-		Bool okF2 = ModEvent.PushFloat(h2, tier as Float)
 		Bool okS2 = ModEvent.PushString(h2, detailLevel)
+		Bool okF2 = ModEvent.PushFloat(h2, tier as Float)
 		Bool okFm2 = ModEvent.PushForm(h2, Self as Form)
-		if okF2 && okS2 && okFm2
+		if okS2 && okF2 && okFm2
 			ModEvent.Send(h2)
-		elseif okF2 && okS2
+		elseif okS2 && okF2
 			ModEvent.Send(h2)
 		endif
 	endif
 	(Self as Form).SendModEvent("SS_WeatherTierLevel", detailLevel, tier as Float)
-
-	_haveEnv = False
-	_havePlayer = False
 EndFunction
 
 ; ===== Lifecycle =====
@@ -108,8 +125,9 @@ Event OnInit()
 	RegisterForModEvent("SS_WeatherEnvResult4", "OnEnv4")
 	RegisterForModEvent("SS_WeatherPlayerResult3", "OnPlayer3")
 	RegisterForModEvent("SS_WeatherPlayerResult4", "OnPlayer4")
+	RegisterForModEvent("SS_RequestWeatherStatus", "OnRequestStatus")
 	if SS_BUILD_TAG == ""
-		SS_BUILD_TAG = "Tiers 2025-10-15.c"
+		SS_BUILD_TAG = "Tiers 2025-10-16.e"
 	endif
 	Debug.Trace("[SS_WeatherTiers] OnInit build=" + SS_BUILD_TAG)
 EndEvent
@@ -158,3 +176,9 @@ Event OnPlayer4(String evn, String s, Float f, Form sender)
 	OnPlayer3(evn, s, f, sender)
 EndEvent
 
+; ===== respond to MCM status request (re-emit last known) =====
+Event OnRequestStatus(String evn, String detail, Float f, Form sender)
+	String detailTier  = "id=" + _currentId + ";tier=" + _lastTier + ";reason=StatusRequest"
+	String detailLevel = "id=" + _currentId + ";pct=" + _lastPct  + ";reason=StatusRequest"
+	EmitTierResults(detailTier, _lastPct, detailLevel, _lastTier)
+EndEvent
