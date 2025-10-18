@@ -3,20 +3,26 @@ Scriptname SS_MCM extends SKI_ConfigBase
 ; =============================================================
 ; Simple Survival (SS) - MCM (safe version for Papyrus, no Var)
 ; Integer display + live refresh from cached values + status re-request
+; PLUS: JSON-driven sliders for player slot BONUSES (Helmet/Armor/Boots/Bracelets/Cloak)
+; Writes to SS/playerwarmth_config.json at paths:
+;   player/slots/<Slot>/bonus  (slash paths to match player script)
 ; =============================================================
 
 Int Property MAX_ROWS = 64 Auto
 ; Legacy single-config path kept for backward compat but unused by routing helpers below
 String Property ConfigPath = "SS/SS_WeatherConfig.json" Auto
 
-; Player warmth constants (mirrors SS_WeatherPlayer)
+; Player warmth constants (legacy defaults only; JSON overrides via sliders)
 Float Property BONUS_HELMET    = 20.0 AutoReadOnly
 Float Property BONUS_ARMOR     = 50.0 AutoReadOnly
 Float Property BONUS_BOOTS     = 25.0 AutoReadOnly
 Float Property BONUS_BRACELETS = 10.0 AutoReadOnly
 Float Property BONUS_CLOAK     = 15.0 AutoReadOnly
 
-; Environment config
+; ===== Player JSON config path =====
+String Property SLOT_CONFIG_PATH = "SS/playerwarmth_config.json" AutoReadOnly
+
+; Environment config (unchanged)
 String _envCfg    = "SS/environmentwarmth_config.json"
 Bool   _envOk     = False
 
@@ -27,7 +33,7 @@ EndFunction
 
 Int Function GetVersion()
     ; bump to force SkyUI to notice updates if cached
-    return 10006 ; +Refresh button, manual SS_Tick
+    return 10009 ; +slot bonus sliders (JSON) + slash paths + change event
 EndFunction
 
 ; ---------- Build/Version Tag + Debug ----------
@@ -57,6 +63,15 @@ Int oidTier
 Int oidPct
 Int oidRefresh
 
+; ===== NEW: Slot bonus sliders (JSON) =====
+Int oidHdrSlotBonuses
+Int oidSlotHelmet
+Int oidSlotArmor
+Int oidSlotBoots
+Int oidSlotBracelets
+Int oidSlotCloak
+
+; ===== existing controls (unchanged) =====
 Int oidHdrWeights
 Int oidReg0
 Int oidReg1
@@ -113,7 +128,7 @@ EndFunction
 
 ; Safe SetTextOptionValue (only after page is built)
 Function SafeSet(Int oid, String text)
-    if CanUpdateOverview() && oid > 0
+    if CanUpdateOverview() && oid >= 0
         SetTextOptionValue(oid, text)
     endif
 EndFunction
@@ -130,6 +145,119 @@ Bool Function CanUpdateOverview()
     endif
     return True
 EndFunction
+
+; ================= JSON helpers for player slot bonuses =================
+Bool _playerCfgOk = False
+String _playerCfgPath = ""
+
+Bool Function _TryLoadPlayerCfgAt(String file)
+    Bool ok = JsonUtil.Load(file)
+    if SS_DEBUG
+        Debug.Trace("[SS_MCM] JsonUtil.Load('" + file + "') => " + ok)
+        if ok && !JsonUtil.IsGood(file)
+            Debug.Trace("[SS_MCM] JSON errors for '" + file + "': " + JsonUtil.GetErrors(file))
+        endif
+    endif
+    if !ok
+        return False
+    endif
+    Int ib = JsonUtil.GetPathIntValue(file, "player/slots/Helmet/bonus", -12345)
+    Float fb = JsonUtil.GetPathFloatValue(file, "player/slots/Helmet/bonus", -12345.0)
+    return (ib != -12345) || (fb != -12345.0)
+EndFunction
+
+String Function _ResolvePlayerCfgPath()
+    String[] cand = Utility.CreateStringArray(5)
+    cand[0] = SLOT_CONFIG_PATH
+    cand[1] = "Data/" + SLOT_CONFIG_PATH
+    cand[2] = "SKSE/Plugins/" + SLOT_CONFIG_PATH
+    cand[3] = "SKSE/Plugins/JsonUtil/" + SLOT_CONFIG_PATH
+    cand[4] = "Data/SKSE/Plugins/JsonUtil/" + SLOT_CONFIG_PATH
+    Int i = 0
+    while i < cand.Length
+        String f = cand[i]
+        if f && f != ""
+            if _TryLoadPlayerCfgAt(f)
+                return f
+            endif
+        endif
+        i += 1
+    endwhile
+    return SLOT_CONFIG_PATH
+EndFunction
+
+Function EnsurePlayerCfg()
+    if _playerCfgOk
+        return
+    endif
+    _playerCfgPath = _ResolvePlayerCfgPath()
+    _playerCfgOk = True
+    if SS_DEBUG
+        Debug.Trace("[SS_MCM] Player cfg path='" + _playerCfgPath + "'")
+    endif
+EndFunction
+
+String Function _AltSlotKey(String k)
+    if k == "Helmet"
+        return "Helmet"
+    elseif k == "Armor"
+        return "Armor"
+    elseif k == "Boots"
+        return "Boots"
+    elseif k == "Bracelets"
+        return "Bracelets"
+    elseif k == "Cloak"
+        return "Cloak"
+    endif
+    return k
+EndFunction
+
+Bool Function _SlotKeyHasData(String file, String slotName)
+    String base = "player/slots/" + slotName
+    Int ib = JsonUtil.GetPathIntValue(file, base + "/bonus", -12345)
+    Float fb = JsonUtil.GetPathFloatValue(file, base + "/bonus", -12345.0)
+    Int[] m = JsonUtil.PathIntElements(file, base + "/masks")
+    Bool hasB = (ib != -12345) || (fb != -12345.0)
+    return hasB || (m && m.Length > 0)
+EndFunction
+
+String Function _ResolveSlotKeyFor(String file, String canonical)
+    ; No case/alias flipping anymore; JSON uses canonical keys
+    if _SlotKeyHasData(file, canonical)
+        return canonical
+    endif
+    return canonical
+EndFunction
+
+Float Function GetSlotBonus(String canonical, Float fallback)
+    EnsurePlayerCfg()
+    String slotName = _ResolveSlotKeyFor(_playerCfgPath, canonical)
+    String path = "player/slots/" + slotName + "/bonus"
+    Int ib = JsonUtil.GetPathIntValue(_playerCfgPath, path, -12345)
+    if ib != -12345
+        return (ib as Float)
+    endif
+    Float fb = JsonUtil.GetPathFloatValue(_playerCfgPath, path, -9999.0)
+    if fb != -9999.0
+        return fb
+    endif
+    return fallback
+EndFunction
+
+Function SetSlotBonus(String canonical, Float value)
+    EnsurePlayerCfg()
+    String slotName = _ResolveSlotKeyFor(_playerCfgPath, canonical)
+    String path = "player/slots/" + slotName + "/bonus"
+    JsonUtil.SetPathFloatValue(_playerCfgPath, path, value)
+    JsonUtil.Save(_playerCfgPath)
+    ; Notify the player script to reload JSON and recompute immediately
+    SendModEvent("SS_PlayerConfigChanged", slotName, value)
+    if SS_DEBUG
+        Debug.Trace("[SS_MCM] SetSlotBonus '" + slotName + "' -> " + value + " saved to '" + _playerCfgPath + "' and event sent")
+    endif
+EndFunction
+
+; ================= /JSON helpers =================
 
 Function RefreshOverview()
     SafeSet(oidMode, "Gear bonuses")
@@ -175,7 +303,7 @@ String Function ClassName(Int c)
     elseif c == 2
         return "Rainy"
     elseif c == 3
-        return "Snowy"
+        return "Snow"
     endif
     return "Unknown"
 EndFunction
@@ -239,10 +367,11 @@ Event OnGameReload()
     RegisterForModEvent("SS_WeatherEnvResult3",    "OnEnvResult3")
     RegisterForModEvent("SS_WeatherEnvResult4",    "OnEnvResult4")
     RegisterForModEvent("SS_WeatherPlayerResult3", "OnPlayerResult3")
+
     RegisterForModEvent("SS_WeatherPlayerResult4", "OnPlayerResult4")
 
     if SS_BUILD_TAG == ""
-        SS_BUILD_TAG = "MCM 2025-10-17.slotsUI"
+        SS_BUILD_TAG = "MCM 2025-10-18.slotSlidersJSON"
     endif
     Debug.Trace("[SS_MCM] OnGameReload build=" + SS_BUILD_TAG)
 
@@ -254,7 +383,6 @@ Event OnTierPct(String evn, String detail, Float f, Form sender)
     if SS_DEBUG
         Debug.Trace("[SS_MCM] TierPct evn=" + evn + " detail=" + detail + " f=" + f + " sender=" + sender)
     endif
-    ; no live UI write here; Overview updates only when that page is open
 EndEvent
 
 Event OnTierLevel(String evn, String detail, Float f, Form sender)
@@ -262,7 +390,6 @@ Event OnTierLevel(String evn, String detail, Float f, Form sender)
     if SS_DEBUG
         Debug.Trace("[SS_MCM] TierLevel evn=" + evn + " detail=" + detail + " f=" + f + " sender=" + sender)
     endif
-    ; no live UI write here; Overview updates only when that page is open
 EndEvent
 
 ; legacy 3-arg with string second param (kept for compatibility)
@@ -271,7 +398,6 @@ Event OnEnvResult(String evn, String s, Float f)
     if SS_DEBUG
         Debug.Trace("[SS_MCM] EnvResult(legacy) evn=" + evn + " s=" + s + " f=" + f)
     endif
-    ; no live UI write here; Overview updates only when that page is open
 EndEvent
 
 ; new split handlers
@@ -280,7 +406,6 @@ Event OnEnvResult3(String evn, String detail, Float f, Form sender)
     if SS_DEBUG
         Debug.Trace("[SS_MCM] EnvResult3 evn=" + evn + " detail=" + detail + " f=" + f + " sender=" + sender)
     endif
-    ; no live UI write here; Overview updates only when that page is open
 EndEvent
 
 Event OnEnvResult4(String evn, String s, Float f, Form sender)
@@ -293,7 +418,6 @@ Event OnPlayerResult(String evn, String s, Float f)
     if SS_DEBUG
         Debug.Trace("[SS_MCM] PlayerResult(legacy) evn=" + evn + " s=" + s + " f=" + f)
     endif
-    ; no live UI write here; Overview updates only when that page is open
 EndEvent
 
 ; new split handlers
@@ -317,6 +441,9 @@ Event OnPageReset(String a_page)
     If a_page == _pageOverview
         BuildPageOverview()
         _overviewReady = True
+        ; Immediately paint weather + cached numbers so we don't show '?' until the deferred update
+        RefreshWeatherClasses()
+        RefreshOverview()
         ; Ask subsystems; paint AFTER this event returns to avoid SkyUI error
         RequestWeatherStatus()
         RegisterForSingleUpdate(0.0) ; defer UI write out of OnPageReset
@@ -324,7 +451,6 @@ Event OnPageReset(String a_page)
         BuildPageWeather()
     EndIf
 EndEvent
-
 Event OnConfigClose()
     _overviewReady = False
     _currentPage = ""
@@ -357,13 +483,14 @@ EndFunction
 Function BuildPageWeather()
     SetCursorFillMode(TOP_TO_BOTTOM)
 
-    ; ===== Player Warmth Base Bonuses (gear occupancy only) =====
-    AddHeaderOption("Player Warmth Bonuses")
-    oidKWLen = AddTextOption("Helmet",  F0(BONUS_HELMET))
-    oidReg0  = AddTextOption("Armour",  F0(BONUS_ARMOR))
-    oidReg1  = AddTextOption("Boots",   F0(BONUS_BOOTS))
-    oidReg2  = AddTextOption("Arms",    F0(BONUS_BRACELETS))
-    oidReg3  = AddTextOption("Cloak",   F0(BONUS_CLOAK))
+    ; ===== Player Warmth Base Bonuses (gear occupancy only, JSON-backed) =====
+    AddHeaderOption("Player Warmth Bonuses (JSON)")
+    oidHdrSlotBonuses = AddHeaderOption("Slots")
+    oidSlotHelmet     = AddSliderOption("Helmet",    GetSlotBonus("Helmet",    BONUS_HELMET),    "{0}")
+    oidSlotArmor      = AddSliderOption("Armour",    GetSlotBonus("Armor",     BONUS_ARMOR),     "{0}")
+    oidSlotBoots      = AddSliderOption("Boots",     GetSlotBonus("Boots",     BONUS_BOOTS),     "{0}")
+    oidSlotBracelets  = AddSliderOption("Arms",      GetSlotBonus("Bracelets", BONUS_BRACELETS), "{0}")
+    oidSlotCloak      = AddSliderOption("Cloak",     GetSlotBonus("Cloak",     BONUS_CLOAK),     "{0}")
 
     ; ===== Environment Warmth =====
     AddHeaderOption("Environment Warmth")
@@ -410,20 +537,28 @@ Function SetFE(String path, Float v)
     JsonUtil.SetFloatValue(_envCfg, path, v)
 EndFunction
 
-; (unused with split helpers) Int Function GetI(String path, Int fallback)
-;     Float f = JsonUtil.GetFloatValue(ConfigPath, path, fallback as Float)
-;     return f as Int
-; EndFunction
-
-; (unused with split helpers) String Function GetS(String path, String fallback)
-;     return JsonUtil.GetStringValue(ConfigPath, path, fallback)
-; EndFunction
-
-; (unused with split helpers) Function SetF(String path, Float v)
-;     JsonUtil.SetFloatValue(ConfigPath, path, v)
-; EndFunction
-
 Event OnOptionSliderOpen(Int option)
+    ; Slot bonuses 0..500
+    if option == oidSlotHelmet || option == oidSlotArmor || option == oidSlotBoots || option == oidSlotBracelets || option == oidSlotCloak
+        SetSliderDialogRange(0.0, 500.0)
+        SetSliderDialogInterval(1.0)
+        Float cur = 0.0
+        if option == oidSlotHelmet
+            cur = GetSlotBonus("Helmet", BONUS_HELMET)
+        elseif option == oidSlotArmor
+            cur = GetSlotBonus("Armor", BONUS_ARMOR)
+        elseif option == oidSlotBoots
+            cur = GetSlotBonus("Boots", BONUS_BOOTS)
+        elseif option == oidSlotBracelets
+            cur = GetSlotBonus("Bracelets", BONUS_BRACELETS)
+        elseif option == oidSlotCloak
+            cur = GetSlotBonus("Cloak", BONUS_CLOAK)
+        endif
+        SetSliderDialogStartValue(cur)
+        SetSliderDialogDefaultValue(cur)
+        return
+    endif
+
     ; Regional / Actual / Exterior: 0..500
     if option == oidAct0 || option == oidAct1 || option == oidAct2 || option == oidAct3 || option == oidInterior || option == oidExterior || option == oidSave || option == oidReload || option == oidNightEnd
         SetSliderDialogRange(0.0, 500.0)
@@ -475,8 +610,24 @@ Event OnOptionSliderOpen(Int option)
 EndEvent
 
 Event OnOptionSliderAccept(Int option, Float value)
+    ; Slot bonuses
+    if option == oidSlotHelmet
+        SetSlotBonus("Helmet", value)
+        SetSliderOptionValue(option, value, "{0}")
+    elseif option == oidSlotArmor
+        SetSlotBonus("Armor", value)
+        SetSliderOptionValue(option, value, "{0}")
+    elseif option == oidSlotBoots
+        SetSlotBonus("Boots", value)
+        SetSliderOptionValue(option, value, "{0}")
+    elseif option == oidSlotBracelets
+        SetSlotBonus("Bracelets", value)
+        SetSliderOptionValue(option, value, "{0}")
+    elseif option == oidSlotCloak
+        SetSlotBonus("Cloak", value)
+        SetSliderOptionValue(option, value, "{0}")
     ; Regional
-    if option == oidAct0
+    elseif option == oidAct0
         SetFE("weights.regional.0", value)
         SetSliderOptionValue(option, value, "{0}")
     elseif option == oidAct1
@@ -514,7 +665,7 @@ Event OnOptionSliderAccept(Int option, Float value)
         SetSliderOptionValue(option, value, "{1}")
     endif
 
-    ; Save environment config if loaded
+    ; Save environment config if loaded (unchanged)
     if _envOk
         JsonUtil.Save(_envCfg)
     endif

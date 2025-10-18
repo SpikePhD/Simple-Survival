@@ -25,14 +25,6 @@ It can explain, review, or generate `.psc` scripts and reference the Creation Ki
 2. **File Scope Restriction**
    Only review and modify files with the `.psc` and `.log` and `.0.log` extensions.
    Do not open or analyze non-script files (e.g., `.pex`, `.txt`, `.html`, `.png`).
-
-3. **In-Game Behavior Simulation**
-   The agent cannot simulate in-game runtime logic.
-   It can infer expected outcomes from known Papyrus mechanics and official documentation only.
-
-4. **No CK Automation**
-   The agent cannot manipulate the Creation Kit, CK64, or xEdit directly — only provide guidance and code examples.
-
 ---
 
 ### 🧱 Style and Rules
@@ -81,5 +73,4 @@ When reviewing or generating code:
 **Don’t:**
 
 * Try to compile `.psc` code.
-* Evaluate or simulate game behavior.
 * Process non-Papyrus files.

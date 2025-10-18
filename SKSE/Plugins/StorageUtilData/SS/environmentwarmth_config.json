@@ -1,16 +1,17 @@
 {
 	"float" : 
 	{
-		"weights.actual.0" : 284.0,
-		"weights.actual.1" : 69.0,
-		"weights.actual.2" : 393.0,
-		"weights.actual.3" : 133.0,
-		"weights.exterior" : 0.0,
+		"night.multiplier" : 1.6000000238418579,
+		"weights.actual.0" : 39.0,
+		"weights.actual.1" : 100.0,
+		"weights.actual.2" : 59.0,
+		"weights.actual.3" : 86.0,
+		"weights.exterior" : 53.0,
 		"weights.interior" : 0.0,
-		"weights.regional.0" : 122.0,
-		"weights.regional.1" : 86.0,
-		"weights.regional.2" : 113.0,
-		"weights.regional.3" : 214.0
+		"weights.regional.0" : 50.0,
+		"weights.regional.1" : 33.0,
+		"weights.regional.2" : 79.0,
+		"weights.regional.3" : 93.0
 	},
 	"night" : 
 	{
