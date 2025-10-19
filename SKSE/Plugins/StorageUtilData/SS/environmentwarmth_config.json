@@ -1,41 +1,37 @@
 {
 	"float" : 
 	{
-		"night.multiplier" : 1.6000000238418579,
-		"weights.actual.0" : 39.0,
-		"weights.actual.1" : 100.0,
-		"weights.actual.2" : 59.0,
-		"weights.actual.3" : 86.0,
-		"weights.exterior" : 53.0,
-		"weights.interior" : 0.0,
-		"weights.regional.0" : 50.0,
-		"weights.regional.1" : 33.0,
-		"weights.regional.2" : 79.0,
-		"weights.regional.3" : 93.0
+		"weights.actual.0" : 42.0,
+		"weights.actual.1" : 84.0,
+		"weights.exterior" : 0.0,
+		"weights.regional.0" : 42.0,
+		"weights.regional.1" : 46.0,
+		"weights.regional.2" : 33.0,
+		"weights.regional.3" : 89.0
 	},
 	"night" : 
 	{
 		"endHour" : 6.0,
-		"multiplier" : 1.25,
+		"multiplier" : 1.6000000000000001,
 		"startHour" : 20.0
 	},
 	"weights" : 
 	{
 		"actual" : 
 		{
-			"0" : 0.0,
-			"1" : 10.0,
-			"2" : 25.0,
-			"3" : 40.0
+			"0" : 39.0,
+			"1" : 100.0,
+			"2" : 59.0,
+			"3" : 86.0
 		},
-		"exterior" : 5.0,
+		"exterior" : 53.0,
 		"interior" : 0.0,
 		"regional" : 
 		{
-			"0" : 0.0,
-			"1" : 5.0,
-			"2" : 15.0,
-			"3" : 25.0
+			"0" : 50.0,
+			"1" : 33.0,
+			"2" : 79.0,
+			"3" : 93.0
 		}
 	}
 }

@@ -139,7 +139,10 @@ Function UpdateInteriorStateAndFire()
         return
     endif
     Cell pc = p.GetParentCell()
-    Bool nowInterior = pc && pc.IsInterior()
+    Bool nowInterior = False
+    if pc
+        nowInterior = pc.IsInterior()
+    endif
     if nowInterior != _lastIsInterior
         _lastIsInterior = nowInterior
         if nowInterior

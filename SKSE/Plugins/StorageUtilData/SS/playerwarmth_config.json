@@ -1,62 +1,24 @@
 {
+	"float" : 
+	{
+		"player.slots.armor.bonus" : 55.0,
+		"player.slots.boots.bonus" : 22.0,
+		"player.slots.bracelets.bonus" : 33.0,
+		"player.slots.cloak.bonus" : 44.0,
+		"player.slots.helmet.bonus" : 11.0,
+		"player/slots/armor/bonus" : 160.0,
+		"player/slots/boots/bonus" : 250.0,
+		"player/slots/bracelets/bonus" : 145.0,
+		"player/slots/cloak/bonus" : 149.0,
+		"player/slots/helmet/bonus" : 124.0
+	},
 	"player" : 
 	{
-		"ambient" : 
-		{
-			"torch" : 
-			{
-				"bonus" : 4,
-				"enabled" : true,
-				"keywordEditorIDs" : 
-				[
-					"WeapTypeTorch"
-				]
-			}
-		},
-		"keywordBonuses" : 
-		{
-			"0" : 
-			{
-				"bonus" : 8,
-				"editorID" : "ArmorMaterialFur"
-			},
-			"1" : 
-			{
-				"bonus" : 5,
-				"editorID" : "ArmorMaterialLeather"
-			},
-			"2" : 
-			{
-				"bonus" : 6,
-				"editorID" : "ArmorMaterialImperial"
-			},
-			"3" : 
-			{
-				"bonus" : 7,
-				"editorID" : "ArmorMaterialImperialHeavy"
-			},
-			"4" : 
-			{
-				"bonus" : 3,
-				"editorID" : "ArmorMaterialIron"
-			},
-			"5" : 
-			{
-				"bonus" : 4,
-				"editorID" : "ClothingCloak"
-			},
-			"len" : 6
-		},
 		"slots" : 
 		{
-			"Accessory" : 
-			{
-				"bonus" : 0,
-				"masks" : []
-			},
 			"Armor" : 
 			{
-				"bonus" : 74.0,
+				"bonus" : 74,
 				"masks" : 
 				[
 					4
@@ -89,34 +51,16 @@
 					16384
 				]
 			},
-			"Extra1" : 
-			{
-				"bonus" : 0,
-				"masks" : []
-			},
-			"Extra2" : 
-			{
-				"bonus" : 0,
-				"masks" : []
-			},
-			"Extra3" : 
-			{
-				"bonus" : 0,
-				"masks" : []
-			},
 			"Helmet" : 
 			{
 				"bonus" : 22,
 				"masks" : 
 				[
-					1
+					1,
+					2,
+					4096
 				]
 			}
 		}
-	},
-	"player/slots/Armor/bonus" : 28.0,
-	"player/slots/Bracelets/bonus" : 55.0,
-	"player/slots/Cloak/bonus" : 284.0,
-	"player/slots/Helmet/bonus" : 75.0,
-	"player/slots/boots/bonus" : 250.0
+	}
 }

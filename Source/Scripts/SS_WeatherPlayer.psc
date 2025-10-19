@@ -2,12 +2,6 @@ Scriptname SS_WeatherPlayer extends Quest
 
 Bool   Property DebugLog = False Auto
 
-Float Property BONUS_HELMET    = 20.0 AutoReadOnly
-Float Property BONUS_ARMOR     = 50.0 AutoReadOnly
-Float Property BONUS_BOOTS     = 25.0 AutoReadOnly
-Float Property BONUS_BRACELETS = 10.0 AutoReadOnly
-Float Property BONUS_CLOAK     = 15.0 AutoReadOnly
-
 ; ---------- Build/Version Tag + Debug ----------
 bool   Property SS_DEBUG     Auto
 string Property SS_BUILD_TAG Auto
@@ -23,7 +17,7 @@ Float[]  _slotBonuses
 
 ; === Helpers for JSON-driven slots ===
 Bool Function LoadSlotConfig()
-    String base = "player/slots"
+    String baseDot = "player.slots."
     String file = SLOT_CONFIG_PATH
 
     ; Ensure the JSON is loadable and valid
@@ -31,16 +25,14 @@ Bool Function LoadSlotConfig()
         if SS_DEBUG
             Debug.Trace("[SS_WeatherPlayer] JsonUtil.Load failed for " + file)
         endif
+        _slotCount = 0
+        _slotNames = None
+        _slotJsonKeys = None
+        _slotBonuses = None
         return False
     endif
-    if !JsonUtil.IsGood(file)
-        if SS_DEBUG
-            Debug.Trace("[SS_WeatherPlayer] JSON parse errors: " + JsonUtil.GetErrors(file))
-        endif
-        ; keep going but values may be defaults
-    endif
 
-    Int n = 10 ; Helmet, Armor, Boots, Bracelets, Cloak, Accessory, Extra1..Extra3, Extra4(reserved)
+    Int n = 5 ; Helmet, Armor, Boots, Bracelets, Cloak
     _slotNames    = Utility.CreateStringArray(n)
     _slotJsonKeys = Utility.CreateStringArray(n)
     _slotBonuses  = Utility.CreateFloatArray(n)
@@ -50,25 +42,20 @@ Bool Function LoadSlotConfig()
     _slotNames[2] = "Boots"
     _slotNames[3] = "Bracelets"
     _slotNames[4] = "Cloak"
-    _slotNames[5] = "Accessory"
-    _slotNames[6] = "Extra1"
-    _slotNames[7] = "Extra2"
-    _slotNames[8] = "Extra3"
-    _slotNames[9] = "Extra4"
 
     Int i = 0
     while i < n
         String canonical = _slotNames[i]
-        String k = _ChooseJsonKey(file, canonical)
-        if k == ""
-            k = canonical
-        endif
+        String k = canonical ; dot-path, exact casing
         _slotJsonKeys[i] = k
 
-        String p = base + "/" + k + "/bonus"
-        _slotBonuses[i] = JsonUtil.GetPathFloatValue(file, p, 0.0)
+        ; Read bonus via DOT path only (matches your JSON layout)
+        Float b = _ReadNumber(file, baseDot + k + ".bonus", 0.0)
+        _slotBonuses[i] = b
+
         if SS_DEBUG
-            Int[] mm = JsonUtil.PathIntElements(file, base + "/" + k + "/masks")
+            ; Best-effort mask count for diagnostics (some PapyrusUtil builds accept dot paths)
+            Int[] mm = JsonUtil.PathIntElements(file, baseDot + k + ".masks")
             Int mc = 0
             if mm
                 mc = mm.Length
@@ -85,68 +72,40 @@ Bool Function LoadSlotConfig()
     return True
 EndFunction
 
-Bool Function _AnyMaskEquippedFromJson(Actor p, String slotName)
-    if !p
-        return False
-    endif
-    String file = SLOT_CONFIG_PATH
-    String base = "player/slots/"
-
-    ; try chosen key, canonical, and lowercase alias
-    String canonical = _Canon(slotName)
-    String k1 = slotName
-    String k2 = canonical
-    String k3 = _AltSlotKey(canonical)
-
-    Int i = 0
-    while i < 3
-        String k = k1
-        if i == 1
-            k = k2
-        elseif i == 2
-            k = k3
-        endif
-        if k != ""
-            String path = base + k + "/masks"
-            Int[] masks = _ResolveMaskArray(file, path)
-            if masks && masks.Length > 0
-                Int j = 0
-                while j < masks.Length
-                    Int mask = masks[j]
-                    if mask > 0
-                        Form f = p.GetWornForm(mask)
-                        if f
-                            if SS_DEBUG
-                                Debug.Trace("[SS_WeatherPlayer] Mask match slot='" + canonical + "' (json='" + k + "') mask=" + mask + " form=" + f + " edid=" + PO3_SKSEFunctions.GetFormEditorID(f))
-                            endif
-                            return True
-                        endif
-                    elseif SS_DEBUG
-                        Debug.Trace("[SS_WeatherPlayer] Ignoring non-positive mask value=" + mask + " at path=" + path)
-                    endif
-                    j += 1
-                endwhile
-                if SS_DEBUG
-                    Debug.Trace("[SS_WeatherPlayer] slot='" + canonical + "' (json='" + k + "') had masks but none are worn")
-                endif
-            else
-                if SS_DEBUG
-                    Debug.Trace("[SS_WeatherPlayer] No masks at path=" + path)
-                endif
-            endif
-        endif
-        i += 1
-    endwhile
-    return False
+Bool Function _AnyMaskEquippedFromJson(Actor p, String slotCanonical)
+	if !p
+		return False
+	endif
+	Int[] masks = _ResolveMaskArrayFor(slotCanonical)
+	if masks && masks.Length > 0
+		Int j = 0
+		while j < masks.Length
+			Int mask = masks[j]
+			if mask > 0 && p.GetWornForm(mask)
+				if SS_DEBUG
+					Debug.Trace("[SS_WeatherPlayer] Mask match slot='" + slotCanonical + "' mask=" + mask)
+				endif
+				return True
+			endif
+			j += 1
+		endWhile
+		if SS_DEBUG
+			Debug.Trace("[SS_WeatherPlayer] slot='" + slotCanonical + "' had masks but none are worn")
+		endif
+		return False
+	endif
+	; No masks in JSON -> canonical fallback
+	return _EquippedByCanonical(p, slotCanonical)
 EndFunction
 
-Int[] Function _ResolveMaskArray(String file, String path)
-    Int[] ints = JsonUtil.PathIntElements(file, path)
+Int[] Function _ResolveMaskArray(String file, String pathDot)
+    ; DOT-path only resolution (int -> string aliases -> float)
+    Int[] ints = JsonUtil.PathIntElements(file, pathDot)
     if ints && ints.Length > 0
         return _CompactMaskArray(ints)
     endif
 
-    String[] names = JsonUtil.PathStringElements(file, path)
+    String[] names = JsonUtil.PathStringElements(file, pathDot)
     if names && names.Length > 0
         Int[] fromNames = Utility.CreateIntArray(names.Length)
         Int ni = 0
@@ -158,7 +117,7 @@ Int[] Function _ResolveMaskArray(String file, String path)
         return _CompactMaskArray(fromNames)
     endif
 
-    Float[] floats = JsonUtil.PathFloatElements(file, path)
+    Float[] floats = JsonUtil.PathFloatElements(file, pathDot)
     if floats && floats.Length > 0
         Int[] converted = Utility.CreateIntArray(floats.Length)
         Int fi = 0
@@ -175,12 +134,56 @@ Int[] Function _ResolveMaskArray(String file, String path)
         return _CompactMaskArray(converted)
     endif
 
-    return None
+    return Utility.CreateIntArray(0)
+EndFunction
+
+; Merge canonical+alt mask arrays for a slot. Prefers canonical order, then appends unique alt entries.
+Int[] Function _ResolveMaskArrayFor(String slotCanonical)
+	EnsureConfigLoaded()
+	String k = _Canon(slotCanonical)
+
+	; dot first
+	Int[] ints = JsonUtil.PathIntElements(SLOT_CONFIG_PATH, "player.slots." + k + ".masks")
+	if ints && ints.Length > 0
+		return _CompactMaskArray(ints)
+	endif
+
+	; also accept string/numeric forms on dot path
+	String[] names = JsonUtil.PathStringElements(SLOT_CONFIG_PATH, "player.slots." + k + ".masks")
+	if names && names.Length > 0
+		Int[] fromNames = Utility.CreateIntArray(names.Length)
+		Int ni = 0
+		while ni < names.Length
+			fromNames[ni] = _MaskAliasToInt(names[ni])
+			ni += 1
+		endWhile
+		return _CompactMaskArray(fromNames)
+	endif
+
+	Float[] floats = JsonUtil.PathFloatElements(SLOT_CONFIG_PATH, "player.slots." + k + ".masks")
+	if floats && floats.Length > 0
+		Int[] converted = Utility.CreateIntArray(floats.Length)
+		Int fi = 0
+		while fi < floats.Length
+			Float raw = floats[fi]
+			converted[fi] = Math.Floor(raw + 0.5) as Int
+			fi += 1
+		endWhile
+		return _CompactMaskArray(converted)
+	endif
+
+	; slash fallback (read-only)
+	ints = JsonUtil.PathIntElements(SLOT_CONFIG_PATH, "player/slots/" + k + "/masks")
+	if ints && ints.Length > 0
+		return _CompactMaskArray(ints)
+	endif
+
+	return Utility.CreateIntArray(0)
 EndFunction
 
 Int[] Function _CompactMaskArray(Int[] raw)
     if !raw
-        return None
+        return Utility.CreateIntArray(0)
     endif
     Int keep = 0
     Int i = 0
@@ -191,7 +194,7 @@ Int[] Function _CompactMaskArray(Int[] raw)
         i += 1
     endwhile
     if keep <= 0
-        return None
+        return Utility.CreateIntArray(0)
     endif
     if keep == raw.Length
         return raw
@@ -256,6 +259,40 @@ Function Log(String s)
 	endif
 EndFunction
 
+; ===== Config loader aligned with Environment script =====
+Bool _cfgOk = False
+
+Function EnsureConfigLoaded()
+	if _cfgOk
+		return
+	endif
+	Bool ok = JsonUtil.Load(SLOT_CONFIG_PATH) ; "SS/playerwarmth_config.json"
+	_cfgOk = ok
+	if SS_DEBUG
+		Debug.Trace("[SS_WeatherPlayer] EnsureConfigLoaded ok=" + ok + " path=" + SLOT_CONFIG_PATH)
+		if !ok
+			Debug.Trace("[SS_WeatherPlayer] ERROR: Could not load player slot config at path=" + SLOT_CONFIG_PATH)
+		endif
+	endif
+EndFunction
+
+; Read a number that may be stored as float or int in JSON (slash-path only)
+Float Function _ReadNumber(String file, String pathDot, Float fallback)
+	; dot path only (PapyrusUtil)
+	Float sentinel = -1234567.89
+	Float fv = JsonUtil.GetFloatValue(file, pathDot, sentinel)
+	if fv != sentinel
+		return fv
+	endif
+	return fallback
+EndFunction
+
+Float Function _ReadBonus(String canonical)
+	EnsureConfigLoaded()
+	String canonKey = _Canon(canonical) ; force canonical keys like "Boots"
+	return _ReadNumber(SLOT_CONFIG_PATH, "player.slots." + canonKey + ".bonus", 0.0)
+EndFunction
+
 ; ===== Slot masks =====
 
 ; ---- Key selection helpers (case-hardened without ToLower()) ----
@@ -291,27 +328,33 @@ String Function _AltSlotKey(String k)
 EndFunction
 
 Bool Function _KeyHasData(String file, String kname)
-    if kname == ""
-        return False
-    endif
-    ; consider either a bonus value or a non-empty masks array as presence
-    Int ib = JsonUtil.GetPathIntValue(file, "player/slots/" + kname + "/bonus", -12345)
-    Float fb = JsonUtil.GetPathFloatValue(file, "player/slots/" + kname + "/bonus", -12345.0)
-    Int[] mm = JsonUtil.PathIntElements(file, "player/slots/" + kname + "/masks")
-    Bool hasB = (ib != -12345) || (fb != -12345.0)
-    return hasB || (mm && mm.Length > 0)
+	if kname == ""
+		return False
+	endif
+	Float sentinel = -12345.0
+	String baseDot = "player.slots." + kname
+	Float fb = JsonUtil.GetPathFloatValue(file, baseDot + ".bonus", sentinel)
+	if fb != sentinel
+		return True
+	endif
+	Int[] mi = JsonUtil.PathIntElements(file, baseDot + ".masks")
+	if mi && mi.Length > 0
+		return True
+	endif
+	Float[] mf = JsonUtil.PathFloatElements(file, baseDot + ".masks")
+	if mf && mf.Length > 0
+		return True
+	endif
+	String[] ms = JsonUtil.PathStringElements(file, baseDot + ".masks")
+	if ms && ms.Length > 0
+		return True
+	endif
+	return False
 EndFunction
 
-String Function _ChooseJsonKey(String file, String canonical)
-    String c = _Canon(canonical)
-    if _KeyHasData(file, c)
-        return c
-    endif
-    String alt = _AltSlotKey(canonical)
-    if _KeyHasData(file, alt)
-        return alt
-    endif
-    return c
+String Function _ChooseJsonKey_CanonicalOnly(String file, String canonical)
+    ; Force canonical keys exactly (Helmet/Armor/Boots/Bracelets/Cloak)
+    return _Canon(canonical)
 EndFunction
 
 ; ===== Slot masks =====
@@ -324,104 +367,83 @@ Int Property MASK_BRACE_ALT    = 8     AutoReadOnly ; Hands (0x00000008)
 Int Property MASK_BOOTS        = 128   AutoReadOnly ; Feet (0x00000080)
 Int Property MASK_BOOTS_ALT    = 256   AutoReadOnly ; Calves (0x00000100)
 Int Property MASK_CLOAK        = 65536 AutoReadOnly ; Back/Cape (0x00010000)
-Int Property MASK_CLOAK_2      = 16384 AutoReadOnly ; Alt cloak (0x00004000)
-
-Float Function SlotBaseBonusIfEquipped(Actor p, String slotKey)
-	Float bonus = 0.0
-	Int maskPrimary = 0
-	Int maskSecondary = 0
-	Int maskTertiary = 0
-	if slotKey == "Helmet"
-		bonus = BONUS_HELMET
-		maskPrimary = MASK_HELMET
-		maskSecondary = MASK_HELMET_HAIR
-		maskTertiary = MASK_HELMET_CIRC
-	elseif slotKey == "Armor"
-		bonus = BONUS_ARMOR
-		maskPrimary = MASK_ARMOR
-	elseif slotKey == "Boots"
-		bonus = BONUS_BOOTS
-		maskPrimary = MASK_BOOTS
-		maskSecondary = MASK_BOOTS_ALT
-	elseif slotKey == "Bracelets"
-		bonus = BONUS_BRACELETS
-		maskPrimary = MASK_BRACE
-		maskSecondary = MASK_BRACE_ALT
-	elseif slotKey == "Cloak"
-		bonus = BONUS_CLOAK
-		maskPrimary = MASK_CLOAK
-		maskSecondary = MASK_CLOAK_2
-	endif
-	if bonus <= 0.0
-		return 0.0
-	endif
-	Form equippedForm = None
-	String editorId = ""
-	if maskPrimary > 0
-		equippedForm = p.GetWornForm(maskPrimary)
-		if equippedForm
-			if SS_DEBUG
-				editorId = PO3_SKSEFunctions.GetFormEditorID(equippedForm)
-				Debug.Trace("[SS_WeatherPlayer] +" + bonus + " from slot=" + slotKey + " form=" + equippedForm + " edid=" + editorId)
-			endif
-			return bonus
-		endif
-	endif
-	if maskSecondary > 0
-		equippedForm = p.GetWornForm(maskSecondary)
-		if equippedForm
-			if SS_DEBUG
-				editorId = PO3_SKSEFunctions.GetFormEditorID(equippedForm)
-				Debug.Trace("[SS_WeatherPlayer] +" + bonus + " from slot=" + slotKey + " (alt mask) form=" + equippedForm + " edid=" + editorId)
-			endif
-			return bonus
-		endif
-	endif
-	if maskTertiary > 0
-		equippedForm = p.GetWornForm(maskTertiary)
-		if equippedForm
-			if SS_DEBUG
-				editorId = PO3_SKSEFunctions.GetFormEditorID(equippedForm)
-				Debug.Trace("[SS_WeatherPlayer] +" + bonus + " from slot=" + slotKey + " (alt mask 3) form=" + equippedForm + " edid=" + editorId)
-			endif
-			return bonus
-		endif
-	endif
-	if SS_DEBUG
-		Debug.Trace("[SS_WeatherPlayer] slot=" + slotKey + " not equipped")
-	endif
-	return 0.0
+Int Property MASK_CLOAK_2      = 16384 AutoReadOnly 
+; === Canonical occupancy check used when JSON provides no masks ===
+Bool Function _EquippedByCanonical(Actor p, String canonical)
+    if !p
+        return False
+    endif
+    if canonical == "Helmet"
+        if p.GetWornForm(MASK_HELMET) || p.GetWornForm(MASK_HELMET_HAIR) || p.GetWornForm(MASK_HELMET_CIRC)
+            return True
+        endif
+    elseif canonical == "Armor"
+        if p.GetWornForm(MASK_ARMOR)
+            return True
+        endif
+    elseif canonical == "Boots"
+        if p.GetWornForm(MASK_BOOTS) || p.GetWornForm(MASK_BOOTS_ALT)
+            return True
+        endif
+    elseif canonical == "Bracelets"
+        if p.GetWornForm(MASK_BRACE) || p.GetWornForm(MASK_BRACE_ALT)
+            return True
+        endif
+    elseif canonical == "Cloak"
+        if p.GetWornForm(MASK_CLOAK) || p.GetWornForm(MASK_CLOAK_2)
+            return True
+        endif
+    endif
+    return False
 EndFunction
 
 Float Function SumBaseSlots(Actor p)
-    ; If JSON-driven slots are loaded, use them. Otherwise fall back to hardcoded slot scan.
-    if _slotCount > 0 && _slotNames
-        Float total = 0.0
-        Int i = 0
-        while i < _slotCount
-            Float b = _slotBonuses[i]
-            String keyForMasks = _slotJsonKeys[i]
-            if keyForMasks == ""
-                keyForMasks = _slotNames[i]
-            endif
-            if b > 0.0 && _AnyMaskEquippedFromJson(p, keyForMasks)
-                if SS_DEBUG
-                    Debug.Trace("[SS_WeatherPlayer] +" + b + " from slot=" + _slotNames[i] + " (json='" + keyForMasks + "')")
-                endif
-                total += b
-            endif
-            i += 1
-        endwhile
-        return total
-    endif
-    ; --- Fallback to previous hardcoded behavior ---
-    Float totalFallback = 0.0
-    totalFallback += SlotBaseBonusIfEquipped(p, "Helmet")
-    totalFallback += SlotBaseBonusIfEquipped(p, "Armor")
-    totalFallback += SlotBaseBonusIfEquipped(p, "Boots")
-    totalFallback += SlotBaseBonusIfEquipped(p, "Bracelets")
-    totalFallback += SlotBaseBonusIfEquipped(p, "Cloak")
-    return totalFallback
+	if !p
+		return 0.0
+	endif
+	Float total = 0.0
+
+	if _AnyMaskEquippedFromJson(p, "Helmet")
+		Float b = _ReadBonus("Helmet")
+		if SS_DEBUG && b > 0.0
+			Debug.Trace("[SS_WeatherPlayer] +" + b + " from Helmet")
+		endif
+		total += b
+	endif
+
+	if _AnyMaskEquippedFromJson(p, "Armor")
+		Float b2 = _ReadBonus("Armor")
+		if SS_DEBUG && b2 > 0.0
+			Debug.Trace("[SS_WeatherPlayer] +" + b2 + " from Armor")
+		endif
+		total += b2
+	endif
+
+	if _AnyMaskEquippedFromJson(p, "Boots")
+		Float b3 = _ReadBonus("Boots")
+		if SS_DEBUG && b3 > 0.0
+			Debug.Trace("[SS_WeatherPlayer] +" + b3 + " from Boots")
+		endif
+		total += b3
+	endif
+
+	if _AnyMaskEquippedFromJson(p, "Bracelets")
+		Float b4 = _ReadBonus("Bracelets")
+		if SS_DEBUG && b4 > 0.0
+			Debug.Trace("[SS_WeatherPlayer] +" + b4 + " from Bracelets")
+		endif
+		total += b4
+	endif
+
+	if _AnyMaskEquippedFromJson(p, "Cloak")
+		Float b5 = _ReadBonus("Cloak")
+		if SS_DEBUG && b5 > 0.0
+			Debug.Trace("[SS_WeatherPlayer] +" + b5 + " from Cloak")
+		endif
+		total += b5
+	endif
+
+	return total
 EndFunction
 
 ; --- Stubs for later passes (so this file compiles now) ---
@@ -495,7 +517,7 @@ Event OnInit()
 	RegisterForModEvent("SS_PlayerConfigChanged", "OnPlayerCfgChanged")
 	UnregisterForUpdate()
 	if SS_BUILD_TAG == ""
-		SS_BUILD_TAG = "Player 2025-10-18.jsonSlots.v2"
+		SS_BUILD_TAG = "Player 2025-10-18.jsonSlots.v3"
 	endif
 	; Load JSON slot config (slots only in this pass)
 	LoadSlotConfig()

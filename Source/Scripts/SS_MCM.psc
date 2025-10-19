@@ -4,8 +4,8 @@ Scriptname SS_MCM extends SKI_ConfigBase
 ; Simple Survival (SS) - MCM (safe version for Papyrus, no Var)
 ; Integer display + live refresh from cached values + status re-request
 ; PLUS: JSON-driven sliders for player slot BONUSES (Helmet/Armor/Boots/Bracelets/Cloak)
-; Writes to SS/playerwarmth_config.json at paths:
-;   player/slots/<Slot>/bonus  (slash paths to match player script)
+; Writes to SS/playerwarmth_config.json using DOT paths only:
+;   player.slots.<Slot>.bonus
 ; =============================================================
 
 Int Property MAX_ROWS = 64 Auto
@@ -33,7 +33,7 @@ EndFunction
 
 Int Function GetVersion()
     ; bump to force SkyUI to notice updates if cached
-    return 10009 ; +slot bonus sliders (JSON) + slash paths + change event
+    return 10012 ; slot bonus reads prefer lowercase -> canonical; writes mirror both
 EndFunction
 
 ; ---------- Build/Version Tag + Debug ----------
@@ -161,9 +161,9 @@ Bool Function _TryLoadPlayerCfgAt(String file)
     if !ok
         return False
     endif
-    Int ib = JsonUtil.GetPathIntValue(file, "player/slots/Helmet/bonus", -12345)
-    Float fb = JsonUtil.GetPathFloatValue(file, "player/slots/Helmet/bonus", -12345.0)
-    return (ib != -12345) || (fb != -12345.0)
+    ; Presence check: DOT path only
+    Float fb = JsonUtil.GetFloatValue(file, "player.slots.Helmet.bonus", -12345.0)
+    return fb != -12345.0
 EndFunction
 
 String Function _ResolvePlayerCfgPath()
@@ -187,14 +187,16 @@ String Function _ResolvePlayerCfgPath()
 EndFunction
 
 Function EnsurePlayerCfg()
-    if _playerCfgOk
-        return
-    endif
-    _playerCfgPath = _ResolvePlayerCfgPath()
-    _playerCfgOk = True
-    if SS_DEBUG
-        Debug.Trace("[SS_MCM] Player cfg path='" + _playerCfgPath + "'")
-    endif
+	if _playerCfgOk
+		return
+	endif
+	; Mirror Environment: fixed logical path under StorageUtilData
+	_playerCfgPath = SLOT_CONFIG_PATH ; "SS/playerwarmth_config.json"
+	JsonUtil.Load(_playerCfgPath) ; ok if file is missing; Save() will create it
+	_playerCfgOk = True
+	if SS_DEBUG
+		Debug.Trace("[SS_MCM] Player cfg path='" + _playerCfgPath + "' (dot-paths)")
+	endif
 EndFunction
 
 String Function _AltSlotKey(String k)
@@ -213,12 +215,9 @@ String Function _AltSlotKey(String k)
 EndFunction
 
 Bool Function _SlotKeyHasData(String file, String slotName)
-    String base = "player/slots/" + slotName
-    Int ib = JsonUtil.GetPathIntValue(file, base + "/bonus", -12345)
-    Float fb = JsonUtil.GetPathFloatValue(file, base + "/bonus", -12345.0)
-    Int[] m = JsonUtil.PathIntElements(file, base + "/masks")
-    Bool hasB = (ib != -12345) || (fb != -12345.0)
-    return hasB || (m && m.Length > 0)
+    ; DOT path only
+    Float fb = JsonUtil.GetFloatValue(file, "player.slots." + slotName + ".bonus", -12345.0)
+    return fb != -12345.0
 EndFunction
 
 String Function _ResolveSlotKeyFor(String file, String canonical)
@@ -230,31 +229,37 @@ String Function _ResolveSlotKeyFor(String file, String canonical)
 EndFunction
 
 Float Function GetSlotBonus(String canonical, Float fallback)
-    EnsurePlayerCfg()
-    String slotName = _ResolveSlotKeyFor(_playerCfgPath, canonical)
-    String path = "player/slots/" + slotName + "/bonus"
-    Int ib = JsonUtil.GetPathIntValue(_playerCfgPath, path, -12345)
-    if ib != -12345
-        return (ib as Float)
-    endif
-    Float fb = JsonUtil.GetPathFloatValue(_playerCfgPath, path, -9999.0)
-    if fb != -9999.0
-        return fb
-    endif
-    return fallback
+	EnsurePlayerCfg()
+	String slotName = canonical ; canonical only
+	String dot = "player.slots." + slotName + ".bonus"
+	Float sentinel = -1234567.89
+
+	Float v = JsonUtil.GetFloatValue(_playerCfgPath, dot, sentinel)
+	if v != sentinel
+		return v
+	endif
+
+	; display-only compatibility
+	String slash = "player/slots/" + slotName + "/bonus"
+	v = JsonUtil.GetPathFloatValue(_playerCfgPath, slash, sentinel)
+	if v != sentinel
+		return v
+	endif
+
+	return fallback
 EndFunction
 
 Function SetSlotBonus(String canonical, Float value)
-    EnsurePlayerCfg()
-    String slotName = _ResolveSlotKeyFor(_playerCfgPath, canonical)
-    String path = "player/slots/" + slotName + "/bonus"
-    JsonUtil.SetPathFloatValue(_playerCfgPath, path, value)
-    JsonUtil.Save(_playerCfgPath)
-    ; Notify the player script to reload JSON and recompute immediately
-    SendModEvent("SS_PlayerConfigChanged", slotName, value)
-    if SS_DEBUG
-        Debug.Trace("[SS_MCM] SetSlotBonus '" + slotName + "' -> " + value + " saved to '" + _playerCfgPath + "' and event sent")
-    endif
+	EnsurePlayerCfg()
+	String slotName = canonical
+	String dot = "player.slots." + slotName + ".bonus"
+	JsonUtil.SetFloatValue(_playerCfgPath, dot, value)
+	JsonUtil.Save(_playerCfgPath)
+	; Tell the player script to recompute immediately
+	SendModEvent("SS_PlayerConfigChanged", slotName, value)
+	if SS_DEBUG
+		Debug.Trace("[SS_MCM] SetSlotBonus '" + slotName + "' -> " + value + " (dot-path) saved to '" + _playerCfgPath + "' and event sent")
+	endif
 EndFunction
 
 ; ================= /JSON helpers =================

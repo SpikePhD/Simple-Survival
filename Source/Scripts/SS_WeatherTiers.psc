@@ -14,6 +14,10 @@ Float _envVal      = 0.0
 Float _playerVal   = 0.0
 String _lastReason = ""
 
+; v4-dedup flags (per tick)
+Bool _sawEnv4    = False
+Bool _sawPlayer4 = False
+
 ; ===== Cached outputs for re-emit to MCM =====
 Float _lastPct  = 0.0
 Int   _lastTier = 0
@@ -39,7 +43,7 @@ EndFunction
 
 Int Function ComputeTier(Float pct)
 	Int t = 0
-	Int ip = pct as Int
+	Int ip = Math.Floor(pct + 0.5) as Int ; round instead of truncate
 	if ip <= 0
 		t = 0
 	elseif ip >= 100
@@ -101,6 +105,8 @@ Function TryComputeAndEmit()
 
 	_haveEnv = False
 	_havePlayer = False
+	_sawEnv4 = False
+	_sawPlayer4 = False
 EndFunction
 
 ; ===== Central emitters (push order fixed: String -> Float -> Form) =====
@@ -174,6 +180,12 @@ EndFunction
 
 ; ===== Result Handlers =====
 Event OnEnv3(String evn, String detail, Float f, Form sender)
+	if _sawEnv4
+		if SS_DEBUG
+			Debug.Trace("[SS_WeatherTiers] Skipping Env3 (already saw Env4) id=" + _currentId)
+		endif
+		return
+	endif
 	_envVal = f
 	_haveEnv = True
 	if SS_DEBUG
@@ -183,6 +195,12 @@ Event OnEnv3(String evn, String detail, Float f, Form sender)
 EndEvent
 
 Event OnPlayer3(String evn, String detail, Float f, Form sender)
+	if _sawPlayer4
+		if SS_DEBUG
+			Debug.Trace("[SS_WeatherTiers] Skipping Player3 (already saw Player4) id=" + _currentId)
+		endif
+		return
+	endif
 	_playerVal = f
 	_havePlayer = True
 	if SS_DEBUG
@@ -198,6 +216,7 @@ Event OnEnv4(String evn, String s, Float f, Form sender)
 		endif
 		return
 	endif
+	_sawEnv4 = True
 	OnEnv3(evn, s, f, sender)
 EndEvent
 
@@ -208,6 +227,7 @@ Event OnPlayer4(String evn, String s, Float f, Form sender)
 		endif
 		return
 	endif
+	_sawPlayer4 = True
 	OnPlayer3(evn, s, f, sender)
 EndEvent
 
