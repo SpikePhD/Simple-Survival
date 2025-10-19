@@ -1,11 +1,11 @@
 {
 	"float" : 
 	{
-		"player.slots.armor.bonus" : 55.0,
-		"player.slots.boots.bonus" : 22.0,
-		"player.slots.bracelets.bonus" : 33.0,
-		"player.slots.cloak.bonus" : 44.0,
-		"player.slots.helmet.bonus" : 11.0,
+		"player.slots.armor.bonus" : 40.0,
+		"player.slots.boots.bonus" : 20.0,
+		"player.slots.bracelets.bonus" : 10.0,
+		"player.slots.cloak.bonus" : 30.0,
+		"player.slots.helmet.bonus" : 10.0,
 		"player/slots/armor/bonus" : 160.0,
 		"player/slots/boots/bonus" : 250.0,
 		"player/slots/bracelets/bonus" : 145.0,

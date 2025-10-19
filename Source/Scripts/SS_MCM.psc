@@ -411,6 +411,10 @@ Event OnEnvResult3(String evn, String detail, Float f, Form sender)
     if SS_DEBUG
         Debug.Trace("[SS_MCM] EnvResult3 evn=" + evn + " detail=" + detail + " f=" + f + " sender=" + sender)
     endif
+    ; Also repaint weather class labels during the same UI pass, if allowed
+    if CanUpdateOverview()
+        RefreshWeatherClasses()
+    endif
 EndEvent
 
 Event OnEnvResult4(String evn, String s, Float f, Form sender)
@@ -433,6 +437,7 @@ Event OnPlayerResult3(String evn, String detail, Float f, Form sender)
     endif
     if CanUpdateOverview()
         RefreshOverview()
+        RefreshWeatherClasses()
     endif
 EndEvent
 

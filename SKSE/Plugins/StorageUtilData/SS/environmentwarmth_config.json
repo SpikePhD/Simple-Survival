@@ -1,13 +1,17 @@
 {
 	"float" : 
 	{
-		"weights.actual.0" : 42.0,
-		"weights.actual.1" : 84.0,
+		"night.multiplier" : 1.25,
+		"weights.actual.0" : 30.0,
+		"weights.actual.1" : 50.0,
+		"weights.actual.2" : 70.0,
+		"weights.actual.3" : 90.0,
 		"weights.exterior" : 0.0,
-		"weights.regional.0" : 42.0,
-		"weights.regional.1" : 46.0,
-		"weights.regional.2" : 33.0,
-		"weights.regional.3" : 89.0
+		"weights.interior" : -20.0,
+		"weights.regional.0" : 20.0,
+		"weights.regional.1" : 40.0,
+		"weights.regional.2" : 60.0,
+		"weights.regional.3" : 80.0
 	},
 	"night" : 
 	{
