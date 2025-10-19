@@ -73,29 +73,29 @@ Bool Function LoadSlotConfig()
 EndFunction
 
 Bool Function _AnyMaskEquippedFromJson(Actor p, String slotCanonical)
-	if !p
-		return False
-	endif
-	Int[] masks = _ResolveMaskArrayFor(slotCanonical)
-	if masks && masks.Length > 0
-		Int j = 0
-		while j < masks.Length
-			Int mask = masks[j]
-			if mask > 0 && p.GetWornForm(mask)
-				if SS_DEBUG
-					Debug.Trace("[SS_WeatherPlayer] Mask match slot='" + slotCanonical + "' mask=" + mask)
-				endif
-				return True
-			endif
-			j += 1
-		endWhile
-		if SS_DEBUG
-			Debug.Trace("[SS_WeatherPlayer] slot='" + slotCanonical + "' had masks but none are worn")
-		endif
-		return False
-	endif
-	; No masks in JSON -> canonical fallback
-	return _EquippedByCanonical(p, slotCanonical)
+    if !p
+        return False
+    endif
+    Int[] masks = _ResolveMaskArrayFor(slotCanonical)
+    if masks && masks.Length > 0
+        Int j = 0
+        while j < masks.Length
+            Int mask = masks[j]
+            if mask > 0 && p.GetWornForm(mask)
+                if SS_DEBUG
+                    Debug.Trace("[SS_WeatherPlayer] Mask match slot='" + slotCanonical + "' mask=" + mask)
+                endif
+                return True
+            endif
+            j += 1
+        endWhile
+        if SS_DEBUG
+            Debug.Trace("[SS_WeatherPlayer] slot='" + slotCanonical + "' had masks but none are worn")
+        endif
+        return False
+    endif
+    ; No masks in JSON -> canonical fallback
+    return _EquippedByCanonical(p, slotCanonical)
 EndFunction
 
 Int[] Function _ResolveMaskArray(String file, String pathDot)
@@ -139,46 +139,46 @@ EndFunction
 
 ; Merge canonical+alt mask arrays for a slot. Prefers canonical order, then appends unique alt entries.
 Int[] Function _ResolveMaskArrayFor(String slotCanonical)
-	EnsureConfigLoaded()
-	String k = _Canon(slotCanonical)
+    EnsureConfigLoaded()
+    String k = _Canon(slotCanonical)
 
-	; dot first
-	Int[] ints = JsonUtil.PathIntElements(SLOT_CONFIG_PATH, "player.slots." + k + ".masks")
-	if ints && ints.Length > 0
-		return _CompactMaskArray(ints)
-	endif
+    ; dot first
+    Int[] ints = JsonUtil.PathIntElements(SLOT_CONFIG_PATH, "player.slots." + k + ".masks")
+    if ints && ints.Length > 0
+        return _CompactMaskArray(ints)
+    endif
 
-	; also accept string/numeric forms on dot path
-	String[] names = JsonUtil.PathStringElements(SLOT_CONFIG_PATH, "player.slots." + k + ".masks")
-	if names && names.Length > 0
-		Int[] fromNames = Utility.CreateIntArray(names.Length)
-		Int ni = 0
-		while ni < names.Length
-			fromNames[ni] = _MaskAliasToInt(names[ni])
-			ni += 1
-		endWhile
-		return _CompactMaskArray(fromNames)
-	endif
+    ; also accept string/numeric forms on dot path
+    String[] names = JsonUtil.PathStringElements(SLOT_CONFIG_PATH, "player.slots." + k + ".masks")
+    if names && names.Length > 0
+        Int[] fromNames = Utility.CreateIntArray(names.Length)
+        Int ni = 0
+        while ni < names.Length
+            fromNames[ni] = _MaskAliasToInt(names[ni])
+            ni += 1
+        endWhile
+        return _CompactMaskArray(fromNames)
+    endif
 
-	Float[] floats = JsonUtil.PathFloatElements(SLOT_CONFIG_PATH, "player.slots." + k + ".masks")
-	if floats && floats.Length > 0
-		Int[] converted = Utility.CreateIntArray(floats.Length)
-		Int fi = 0
-		while fi < floats.Length
-			Float raw = floats[fi]
-			converted[fi] = Math.Floor(raw + 0.5) as Int
-			fi += 1
-		endWhile
-		return _CompactMaskArray(converted)
-	endif
+    Float[] floats = JsonUtil.PathFloatElements(SLOT_CONFIG_PATH, "player.slots." + k + ".masks")
+    if floats && floats.Length > 0
+        Int[] converted = Utility.CreateIntArray(floats.Length)
+        Int fi = 0
+        while fi < floats.Length
+            Float raw = floats[fi]
+            converted[fi] = Math.Floor(raw + 0.5) as Int
+            fi += 1
+        endWhile
+        return _CompactMaskArray(converted)
+    endif
 
-	; slash fallback (read-only)
-	ints = JsonUtil.PathIntElements(SLOT_CONFIG_PATH, "player/slots/" + k + "/masks")
-	if ints && ints.Length > 0
-		return _CompactMaskArray(ints)
-	endif
+    ; slash fallback (read-only)
+    ints = JsonUtil.PathIntElements(SLOT_CONFIG_PATH, "player/slots/" + k + "/masks")
+    if ints && ints.Length > 0
+        return _CompactMaskArray(ints)
+    endif
 
-	return Utility.CreateIntArray(0)
+    return Utility.CreateIntArray(0)
 EndFunction
 
 Int[] Function _CompactMaskArray(Int[] raw)
@@ -244,6 +244,7 @@ Int Function _MaskAliasToInt(String aliasKey)
     endif
     return 0
 EndFunction
+
 ; ========= Cached snapshot for re-emit to MCM =========
 Int   _lastSnapshotId = 0
 Float _lastWarmth     = 0.0
@@ -252,48 +253,44 @@ Float _lastWarmth     = 0.0
 Bool _delayedPending = False
 Int  _delayedSnapshot = 0
 
-
 Function Log(String s)
-	if DebugLog
-		Debug.Trace("[SS_WeatherPlayer] " + s)
-	endif
+    if DebugLog
+        Debug.Trace("[SS_WeatherPlayer] " + s)
+    endif
 EndFunction
 
 ; ===== Config loader aligned with Environment script =====
 Bool _cfgOk = False
 
 Function EnsureConfigLoaded()
-	if _cfgOk
-		return
-	endif
-	Bool ok = JsonUtil.Load(SLOT_CONFIG_PATH) ; "SS/playerwarmth_config.json"
-	_cfgOk = ok
-	if SS_DEBUG
-		Debug.Trace("[SS_WeatherPlayer] EnsureConfigLoaded ok=" + ok + " path=" + SLOT_CONFIG_PATH)
-		if !ok
-			Debug.Trace("[SS_WeatherPlayer] ERROR: Could not load player slot config at path=" + SLOT_CONFIG_PATH)
-		endif
-	endif
+    if _cfgOk
+        return
+    endif
+    Bool ok = JsonUtil.Load(SLOT_CONFIG_PATH) ; "SS/playerwarmth_config.json"
+    _cfgOk = ok
+    if SS_DEBUG
+        Debug.Trace("[SS_WeatherPlayer] EnsureConfigLoaded ok=" + ok + " path=" + SLOT_CONFIG_PATH)
+        if !ok
+            Debug.Trace("[SS_WeatherPlayer] ERROR: Could not load player slot config at path=" + SLOT_CONFIG_PATH)
+        endif
+    endif
 EndFunction
 
-; Read a number that may be stored as float or int in JSON (slash-path only)
+; Read a number that may be stored as float or int in JSON (dot-path)
 Float Function _ReadNumber(String file, String pathDot, Float fallback)
-	; dot path only (PapyrusUtil)
-	Float sentinel = -1234567.89
-	Float fv = JsonUtil.GetFloatValue(file, pathDot, sentinel)
-	if fv != sentinel
-		return fv
-	endif
-	return fallback
+    Float sentinel = -1234567.89
+    Float fv = JsonUtil.GetFloatValue(file, pathDot, sentinel)
+    if fv != sentinel
+        return fv
+    endif
+    return fallback
 EndFunction
 
 Float Function _ReadBonus(String canonical)
-	EnsureConfigLoaded()
-	String canonKey = _Canon(canonical) ; force canonical keys like "Boots"
-	return _ReadNumber(SLOT_CONFIG_PATH, "player.slots." + canonKey + ".bonus", 0.0)
+    EnsureConfigLoaded()
+    String canonKey = _Canon(canonical) ; force canonical keys like "Boots"
+    return _ReadNumber(SLOT_CONFIG_PATH, "player.slots." + canonKey + ".bonus", 0.0)
 EndFunction
-
-; ===== Slot masks =====
 
 ; ---- Key selection helpers (case-hardened without ToLower()) ----
 String Function _Canon(String k)
@@ -328,28 +325,28 @@ String Function _AltSlotKey(String k)
 EndFunction
 
 Bool Function _KeyHasData(String file, String kname)
-	if kname == ""
-		return False
-	endif
-	Float sentinel = -12345.0
-	String baseDot = "player.slots." + kname
-	Float fb = JsonUtil.GetPathFloatValue(file, baseDot + ".bonus", sentinel)
-	if fb != sentinel
-		return True
-	endif
-	Int[] mi = JsonUtil.PathIntElements(file, baseDot + ".masks")
-	if mi && mi.Length > 0
-		return True
-	endif
-	Float[] mf = JsonUtil.PathFloatElements(file, baseDot + ".masks")
-	if mf && mf.Length > 0
-		return True
-	endif
-	String[] ms = JsonUtil.PathStringElements(file, baseDot + ".masks")
-	if ms && ms.Length > 0
-		return True
-	endif
-	return False
+    if kname == ""
+        return False
+    endif
+    Float sentinel = -12345.0
+    String baseDot = "player.slots." + kname
+    Float fb = JsonUtil.GetPathFloatValue(file, baseDot + ".bonus", sentinel)
+    if fb != sentinel
+        return True
+    endif
+    Int[] mi = JsonUtil.PathIntElements(file, baseDot + ".masks")
+    if mi && mi.Length > 0
+        return True
+    endif
+    Float[] mf = JsonUtil.PathFloatElements(file, baseDot + ".masks")
+    if mf && mf.Length > 0
+        return True
+    endif
+    String[] ms = JsonUtil.PathStringElements(file, baseDot + ".masks")
+    if ms && ms.Length > 0
+        return True
+    endif
+    return False
 EndFunction
 
 String Function _ChooseJsonKey_CanonicalOnly(String file, String canonical)
@@ -368,6 +365,7 @@ Int Property MASK_BOOTS        = 128   AutoReadOnly ; Feet (0x00000080)
 Int Property MASK_BOOTS_ALT    = 256   AutoReadOnly ; Calves (0x00000100)
 Int Property MASK_CLOAK        = 65536 AutoReadOnly ; Back/Cape (0x00010000)
 Int Property MASK_CLOAK_2      = 16384 AutoReadOnly 
+
 ; === Canonical occupancy check used when JSON provides no masks ===
 Bool Function _EquippedByCanonical(Actor p, String canonical)
     if !p
@@ -398,203 +396,289 @@ Bool Function _EquippedByCanonical(Actor p, String canonical)
 EndFunction
 
 Float Function SumBaseSlots(Actor p)
-	if !p
-		return 0.0
-	endif
-	Float total = 0.0
+    if !p
+        return 0.0
+    endif
+    Float total = 0.0
 
-	if _AnyMaskEquippedFromJson(p, "Helmet")
-		Float b = _ReadBonus("Helmet")
-		if SS_DEBUG && b > 0.0
-			Debug.Trace("[SS_WeatherPlayer] +" + b + " from Helmet")
-		endif
-		total += b
-	endif
+    if _AnyMaskEquippedFromJson(p, "Helmet")
+        Float b = _ReadBonus("Helmet")
+        if SS_DEBUG && b > 0.0
+            Debug.Trace("[SS_WeatherPlayer] +" + b + " from Helmet")
+        endif
+        total += b
+    endif
 
-	if _AnyMaskEquippedFromJson(p, "Armor")
-		Float b2 = _ReadBonus("Armor")
-		if SS_DEBUG && b2 > 0.0
-			Debug.Trace("[SS_WeatherPlayer] +" + b2 + " from Armor")
-		endif
-		total += b2
-	endif
+    if _AnyMaskEquippedFromJson(p, "Armor")
+        Float b2 = _ReadBonus("Armor")
+        if SS_DEBUG && b2 > 0.0
+            Debug.Trace("[SS_WeatherPlayer] +" + b2 + " from Armor")
+        endif
+        total += b2
+    endif
 
-	if _AnyMaskEquippedFromJson(p, "Boots")
-		Float b3 = _ReadBonus("Boots")
-		if SS_DEBUG && b3 > 0.0
-			Debug.Trace("[SS_WeatherPlayer] +" + b3 + " from Boots")
-		endif
-		total += b3
-	endif
+    if _AnyMaskEquippedFromJson(p, "Boots")
+        Float b3 = _ReadBonus("Boots")
+        if SS_DEBUG && b3 > 0.0
+            Debug.Trace("[SS_WeatherPlayer] +" + b3 + " from Boots")
+        endif
+        total += b3
+    endif
 
-	if _AnyMaskEquippedFromJson(p, "Bracelets")
-		Float b4 = _ReadBonus("Bracelets")
-		if SS_DEBUG && b4 > 0.0
-			Debug.Trace("[SS_WeatherPlayer] +" + b4 + " from Bracelets")
-		endif
-		total += b4
-	endif
+    if _AnyMaskEquippedFromJson(p, "Bracelets")
+        Float b4 = _ReadBonus("Bracelets")
+        if SS_DEBUG && b4 > 0.0
+            Debug.Trace("[SS_WeatherPlayer] +" + b4 + " from Bracelets")
+        endif
+        total += b4
+    endif
 
-	if _AnyMaskEquippedFromJson(p, "Cloak")
-		Float b5 = _ReadBonus("Cloak")
-		if SS_DEBUG && b5 > 0.0
-			Debug.Trace("[SS_WeatherPlayer] +" + b5 + " from Cloak")
-		endif
-		total += b5
-	endif
+    if _AnyMaskEquippedFromJson(p, "Cloak")
+        Float b5 = _ReadBonus("Cloak")
+        if SS_DEBUG && b5 > 0.0
+            Debug.Trace("[SS_WeatherPlayer] +" + b5 + " from Cloak")
+        endif
+        total += b5
+    endif
 
-	return total
+    return total
 EndFunction
 
 ; --- Stubs for later passes (so this file compiles now) ---
 Float Function SumKeywordBonuses(Actor p)
-	return 0.0
+    return 0.0
+EndFunction
+
+; === Ambient helpers ===
+Bool Function _IsTorchForm(Form f)
+    if !f
+        return False
+    endif
+    ; Prefer actual Light forms (vanilla Torch01 is a Light)
+    Light L = f as Light
+    if L
+        String ed = PO3_SKSEFunctions.GetFormEditorID(L as Form)
+        if ed && ed != ""
+            ; broad but safe: match exact Torch01 or any EditorID containing "Torch"
+            if ed == "Torch01" || ed == "Torch" || StringUtil.Find(ed, "Torch") != -1
+                return True
+            endif
+        endif
+        return False
+    endif
+
+    ; Some mods make torches as weapons/misc. Fall back to name/EDID sniff.
+    String ed2 = PO3_SKSEFunctions.GetFormEditorID(f)
+    if ed2 && ed2 != ""
+        if ed2 == "Torch01" || ed2 == "Torch" || StringUtil.Find(ed2, "Torch") != -1
+            return True
+        endif
+    endif
+    return False
+EndFunction
+
+Bool Function _EquippedTorch(Actor p)
+    if !p
+        return False
+    endif
+
+    ; Torches are almost always equipped in the LEFT hand as a Light (LIGH)
+    Form lh = p.GetEquippedObject(1)
+    if _IsTorchForm(lh)
+        if SS_DEBUG
+            String edL = PO3_SKSEFunctions.GetFormEditorID(lh)
+            Debug.Trace("[SS_WeatherPlayer] Torch detected in left hand: " + edL)
+        endif
+        return True
+    endif
+
+    ; Rarely, mods place torches in right hand or as weapons—check right too
+    Form rh = p.GetEquippedObject(0)
+    if _IsTorchForm(rh)
+        if SS_DEBUG
+            String edR = PO3_SKSEFunctions.GetFormEditorID(rh)
+            Debug.Trace("[SS_WeatherPlayer] Torch detected in right hand: " + edR)
+        endif
+        return True
+    endif
+
+    ; Also check equipped weapons just in case a mod implements torch as a Weapon
+    Weapon wL = p.GetEquippedWeapon(True)
+    Weapon wR = p.GetEquippedWeapon(False)
+    if _IsTorchForm(wL as Form) || _IsTorchForm(wR as Form)
+        if SS_DEBUG
+            String edWL = PO3_SKSEFunctions.GetFormEditorID(wL as Form)
+            String edWR = PO3_SKSEFunctions.GetFormEditorID(wR as Form)
+            Debug.Trace("[SS_WeatherPlayer] Torch detected via weapon path L='" + edWL + "' R='" + edWR + "'")
+        endif
+        return True
+    endif
+
+    return False
 EndFunction
 
 Float Function SumAmbientBonuses(Actor p)
-	return 0.0
+    if !p
+        return 0.0
+    endif
+    EnsureConfigLoaded()
+    Float total = 0.0
+
+    Float torchBonus = _ReadNumber(SLOT_CONFIG_PATH, "player.ambient.torch.bonus", 0.0)
+    if SS_DEBUG
+        Debug.Trace("[SS_WeatherPlayer] torchBonus cfg=" + torchBonus)
+    endif
+    if torchBonus != 0.0 && _EquippedTorch(p)
+        total += torchBonus
+        if SS_DEBUG
+            Debug.Trace("[SS_WeatherPlayer] +" + torchBonus + " from Torch")
+        endif
+    endif
+
+    return total
 EndFunction
+
 ; ===== Debug: dump commonly used biped slot masks and the worn forms =====
 Function DumpWornCommonMasks(Actor p)
-	Int[] masks = new Int[18]
-	masks[0] = 1      ; Head
-	masks[1] = 2
-	masks[2] = 4      ; Body
-	masks[3] = 8
-	masks[4] = 16     ; Forearms
-	masks[5] = 32
-	masks[6] = 64
-	masks[7] = 128    ; Feet
-	masks[8] = 256
-	masks[9] = 512
-	masks[10] = 1024
-	masks[11] = 2048
-	masks[12] = 4096
-	masks[13] = 8192
-	masks[14] = 16384 ; Cloak alt
-	masks[15] = 32768
-	masks[16] = 65536 ; Cloak/Back
-	masks[17] = 131072
-	Int i = 0
-	while i < masks.Length
-		Int m = masks[i]
-		Form f = p.GetWornForm(m)
-		if f
-			String ed = PO3_SKSEFunctions.GetFormEditorID(f)
-			Debug.Trace("[SS_WeatherPlayer] WORN mask=" + m + " form=" + f + " edid=" + ed)
-		endif
-		i = i + 1
-	endwhile
+    Int[] masks = new Int[18]
+    masks[0] = 1      ; Head
+    masks[1] = 2
+    masks[2] = 4      ; Body
+    masks[3] = 8
+    masks[4] = 16     ; Forearms
+    masks[5] = 32
+    masks[6] = 64
+    masks[7] = 128    ; Feet
+    masks[8] = 256
+    masks[9] = 512
+    masks[10] = 1024
+    masks[11] = 2048
+    masks[12] = 4096
+    masks[13] = 8192
+    masks[14] = 16384 ; Cloak alt
+    masks[15] = 32768
+    masks[16] = 65536 ; Cloak/Back
+    masks[17] = 131072
+    Int i = 0
+    while i < masks.Length
+        Int m = masks[i]
+        Form f = p.GetWornForm(m)
+        if f
+            String ed = PO3_SKSEFunctions.GetFormEditorID(f)
+            Debug.Trace("[SS_WeatherPlayer] WORN mask=" + m + " form=" + f + " edid=" + ed)
+        endif
+        i = i + 1
+    endwhile
 EndFunction
 
 ; ========= central emitter (v4 if possible + v3 fallback) =========
 Function EmitPlayerResults(Int snapshotId, Float warmth)
-	string sid = "" + snapshotId
-	int h = ModEvent.Create("SS_WeatherPlayerResult4")
-	bool okS = False
-	bool okF = False
-	bool okFm = False
-	bool sent4 = False
-	if h
-		okS = ModEvent.PushString(h, sid)
-		okF = ModEvent.PushFloat(h, warmth)
-		okFm = ModEvent.PushForm(h, Game.GetPlayer() as Form)
-		if okS && okF && okFm
-			sent4 = ModEvent.Send(h)
-		endif
-	endif
-	(Game.GetPlayer() as Form).SendModEvent("SS_WeatherPlayerResult3", "", warmth)
-	if SS_DEBUG
-		Debug.Trace("[SS_WeatherPlayer] Emit " + SS_BUILD_TAG + " id=" + sid + " warmth=" + warmth + " okS=" + okS + " okF=" + okF + " okFm=" + okFm + " sent4=" + sent4 + " (also sent PlayerResult3 fallback)")
-	endif
+    string sid = "" + snapshotId
+    int h = ModEvent.Create("SS_WeatherPlayerResult4")
+    bool okS = False
+    bool okF = False
+    bool okFm = False
+    bool sent4 = False
+    if h
+        okS = ModEvent.PushString(h, sid)
+        okF = ModEvent.PushFloat(h, warmth)
+        okFm = ModEvent.PushForm(h, Game.GetPlayer() as Form)
+        if okS && okF && okFm
+            sent4 = ModEvent.Send(h)
+        endif
+    endif
+    (Game.GetPlayer() as Form).SendModEvent("SS_WeatherPlayerResult3", "", warmth)
+    if SS_DEBUG
+        Debug.Trace("[SS_WeatherPlayer] Emit " + SS_BUILD_TAG + " id=" + sid + " warmth=" + warmth + " okS=" + okS + " okF=" + okF + " okFm=" + okFm + " sent4=" + sent4 + " (also sent PlayerResult3 fallback)")
+    endif
 EndFunction
 
 ; ========= lifecycle =========
 Event OnInit()
-	RegisterForModEvent("SS_Tick3", "OnTick3")
-	RegisterForModEvent("SS_Tick4", "OnTick4")
-	RegisterForModEvent("SS_RequestWeatherStatus", "OnRequestStatus")
-	RegisterForModEvent("SS_PlayerConfigChanged", "OnPlayerCfgChanged")
-	UnregisterForUpdate()
-	if SS_BUILD_TAG == ""
-		SS_BUILD_TAG = "Player 2025-10-18.jsonSlots.v3"
-	endif
-	; Load JSON slot config (slots only in this pass)
-	LoadSlotConfig()
-	Debug.Trace("[SS_WeatherPlayer] OnInit build=" + SS_BUILD_TAG)
-	if DebugLog
-		Log("OnInit")
-	endif
+    RegisterForModEvent("SS_Tick3", "OnTick3")
+    RegisterForModEvent("SS_Tick4", "OnTick4")
+    RegisterForModEvent("SS_RequestWeatherStatus", "OnRequestStatus")
+    RegisterForModEvent("SS_PlayerConfigChanged", "OnPlayerCfgChanged")
+    UnregisterForUpdate()
+    if SS_BUILD_TAG == ""
+        SS_BUILD_TAG = "Player 2025-10-18.jsonSlots.v3"
+    endif
+    ; Load JSON slot config (slots only in this pass)
+    LoadSlotConfig()
+    Debug.Trace("[SS_WeatherPlayer] OnInit build=" + SS_BUILD_TAG)
+    if DebugLog
+        Log("OnInit")
+    endif
 EndEvent
 
 ; respond to MCM status request by re-emitting cached warmth
 Event OnRequestStatus(String evn, String detail, Float f, Form sender)
-	EmitPlayerResults(_lastSnapshotId, _lastWarmth)
+    EmitPlayerResults(_lastSnapshotId, _lastWarmth)
 EndEvent
 
 ; 3-arg tick: (string, float, form)
 Event OnTick3(String eventName, String reason, Float numArg, Form sender)
-	HandleTick(numArg, sender)
+    HandleTick(numArg, sender)
 EndEvent
 
 ; 4-arg tick: (string, string, float, form)
 Event OnTick4(String eventName, String reason, Float numArg, Form sender)
-	HandleTick(numArg, sender)
+    HandleTick(numArg, sender)
 EndEvent
 
 Event OnUpdate()
-	; delayed second pass to catch post-equip state
-	_delayedPending = False
-	Actor p = Game.GetPlayer()
-	if !p
-		return
-	endif
-	Float baseTotal = SumBaseSlots(p)
-	Float kwTotal   = SumKeywordBonuses(p)
-	Float ambTotal  = SumAmbientBonuses(p)
-	_lastWarmth = baseTotal + kwTotal + ambTotal
-	if SS_DEBUG
-		DumpWornCommonMasks(p)
-		Debug.Trace("[SS_WeatherPlayer] (delayed) base=" + baseTotal + " kw=" + kwTotal + " amb=" + ambTotal + " -> warmth=" + _lastWarmth)
-	endif
-	EmitPlayerResults(_delayedSnapshot, _lastWarmth)
+    ; delayed second pass to catch post-equip state
+    _delayedPending = False
+    Actor p = Game.GetPlayer()
+    if !p
+        return
+    endif
+    Float baseTotal = SumBaseSlots(p)
+    Float kwTotal   = SumKeywordBonuses(p)
+    Float ambTotal  = SumAmbientBonuses(p)
+    _lastWarmth = baseTotal + kwTotal + ambTotal
+    if SS_DEBUG
+        DumpWornCommonMasks(p)
+        Debug.Trace("[SS_WeatherPlayer] (delayed) base=" + baseTotal + " kw=" + kwTotal + " amb=" + ambTotal + " -> warmth=" + _lastWarmth)
+    endif
+    EmitPlayerResults(_delayedSnapshot, _lastWarmth)
 EndEvent
 
 Function HandleTick(Float numArg, Form sender)
-	Actor p = Game.GetPlayer()
-	if SS_DEBUG
-		Debug.Trace("[SS_WeatherPlayer] HandleTick numArg=" + numArg + " sender=" + sender + " p=" + p)
-	endif
-	if !p
-		Log("No player")
-		return
-	endif
-	Int snapshotId = numArg as Int
-	Float baseTotal = SumBaseSlots(p)
-	Float kwTotal   = SumKeywordBonuses(p)
-	Float ambTotal  = SumAmbientBonuses(p)
-	Float warmth    = baseTotal + kwTotal + ambTotal
-	_lastSnapshotId = snapshotId
-	_lastWarmth     = warmth
-	if SS_DEBUG
-		DumpWornCommonMasks(p)
-		Debug.Trace("[SS_WeatherPlayer] (immediate) base=" + baseTotal + " kw=" + kwTotal + " amb=" + ambTotal + " -> warmth=" + warmth)
-	endif
-	EmitPlayerResults(snapshotId, warmth)
-	; schedule a delayed re-check to catch late slot swaps
-	_delayedSnapshot = snapshotId
-	if !_delayedPending
-		_delayedPending = True
-		RegisterForSingleUpdate(0.30)
-	endif
+    Actor p = Game.GetPlayer()
+    if SS_DEBUG
+        Debug.Trace("[SS_WeatherPlayer] HandleTick numArg=" + numArg + " sender=" + sender + " p=" + p)
+    endif
+    if !p
+        Log("No player")
+        return
+    endif
+    Int snapshotId = numArg as Int
+    Float baseTotal = SumBaseSlots(p)
+    Float kwTotal   = SumKeywordBonuses(p)
+    Float ambTotal  = SumAmbientBonuses(p)
+    Float warmth    = baseTotal + kwTotal + ambTotal
+    _lastSnapshotId = snapshotId
+    _lastWarmth     = warmth
+    if SS_DEBUG
+        DumpWornCommonMasks(p)
+        Debug.Trace("[SS_WeatherPlayer] (immediate) base=" + baseTotal + " kw=" + kwTotal + " amb=" + ambTotal + " -> warmth=" + warmth)
+    endif
+    EmitPlayerResults(snapshotId, warmth)
+    ; schedule a delayed re-check to catch late slot swaps
+    _delayedSnapshot = snapshotId
+    if !_delayedPending
+        _delayedPending = True
+        RegisterForSingleUpdate(0.30)
+    endif
 EndFunction
 
 ; react to MCM changes (slot bonus sliders)
 Event OnPlayerCfgChanged(String evn, String slotName, Float value, Form sender)
-	if SS_DEBUG
-		Debug.Trace("[SS_WeatherPlayer] OnPlayerCfgChanged slot='" + slotName + "' value=" + value + " -> reloading slot config")
-	endif
-	LoadSlotConfig()
-	; also recompute immediately so MCM sees new value
-	HandleTick(_lastSnapshotId as Float, sender)
+    if SS_DEBUG
+        Debug.Trace("[SS_WeatherPlayer] OnPlayerCfgChanged slot='" + slotName + "' value=" + value + " -> reloading slot config")
+    endif
+    LoadSlotConfig()
+    ; also recompute immediately so MCM sees new value
+    HandleTick(_lastSnapshotId as Float, sender)
 EndEvent
